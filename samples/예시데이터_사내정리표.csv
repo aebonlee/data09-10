@@ -1,0 +1,6 @@
+﻿브랜드,모델명,장비군,톤급,운전중량(t),엔진출력(hp),버킷용량(m3),출시연도,출처URL,수집일,이미지경로,뷰,비고
+CAT,예시-EX330,굴착기,Medium,30.5,204,1.6,2025,https://example.com/sample/ex330,2026.09.10,images/예시-EX330_side.jpg,측면,예시 데이터
+Komatsu,예시-EX360,Excavator,Large,36.2,271,1.9,2024,https://example.com/sample/ex360,2026-09-12,images/예시-EX360_side.jpg; images/예시-EX360_side2.jpg,Side,예시 데이터
+Volvo,예시-WL120,휠로더,,12.8,,2.3,2023,,2026-09-15,,,예시 데이터 — 출처·이미지 없음
+Kobelco,예시-EX170,Excavator,,17.1,100,0.7,2025,https://example.com/sample/ex170,2026-09-18,images/예시-EX170_fq.jpg,사선 전면,예시 데이터
+,예시-이름만,Excavator,,,,,,,,,,브랜드 없음 — 건너뜀
