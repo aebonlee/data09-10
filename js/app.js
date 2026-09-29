@@ -597,7 +597,7 @@
   function control(f, m) {
     var v = m[f.key];
     if (f.type === 'select') return selectEl(f.key, f.options, v, '선택 안 함');
-    if (f.type === 'score') return selectEl(f.key, ['1', '2', '3', '4', '5'], v, '평가 안 함');
+    if (f.type === 'score') return selectEl(f.key, L.SCORE_OPTIONS, v, '평가 안 함');
     if (f.type === 'tags') return h('input', { name: f.key, value: (v || []).join(', '), placeholder: '쉼표로 구분' });
     if (f.type === 'date') return h('input', { name: f.key, type: 'date', value: L.toDateStr(v) || '' });
     if (f.type === 'number') return h('input', { name: f.key, type: 'text', inputmode: 'decimal', value: v === '' || v == null ? '' : String(v), placeholder: f.unit ? '숫자 (' + f.unit + ') · 단위 적으면 변환' : '' });
@@ -1007,7 +1007,7 @@
       h('tbody', null, L.filterModels(models, {}).map(function (m) {
         return h('tr', null, h('th', { scope: 'row' }, h('a', { href: '#/model/' + m.id }, L.brandShort(m.brand) + ' ' + m.model_name)),
           axes.map(function (a) {
-            var s = selectEl(a.key, ['1', '2', '3', '4', '5'], m[a.key], '-');
+            var s = selectEl(a.key, L.SCORE_OPTIONS, m[a.key], '-');
             s.setAttribute('aria-label', m.model_name + ' ' + a.name + ' 평가');
             s.addEventListener('change', function () {
               var x = modelById(m.id); if (!x) return;
@@ -1022,7 +1022,7 @@
     var noteTa = h('textarea', { name: 'note', rows: 6, placeholder: '예) 중형 굴착기는 슬림 필러·넓은 글라스가 공통 흐름입니다. CMF 는 전 브랜드가 평이해 차별화 여지가 있습니다.' }, note.text || '');
     var originSel = selectEl('origin', ['디자이너 작성', 'AI 요약(검토 필요)'], note.origin || '디자이너 작성');
     var noteCard = h('section', { class: 'card' }, h('h2', null, '요약 코멘트'),
-      h('p', { class: 'note' }, '리포트 6번 항목에 들어갑니다. AI 요약을 쓰려면 ① 프롬프트를 복사해 ChatGPT 등에 붙여 넣고 ② 받은 답을 아래 칸에 붙여 넣은 뒤 ③ 출처를 「AI 요약(검토 필요)」로 두고 저장해 주세요. 프롬프트에는 모델명·점수·태그만 들어가고 이미지·출처 URL 은 들어가지 않습니다.'),
+      h('p', { class: 'note' }, '리포트 「7. 요약 코멘트」 항목에 들어갑니다. AI 요약을 쓰려면 ① 프롬프트를 복사해 ChatGPT 등에 붙여 넣고 ② 받은 답을 아래 칸에 붙여 넣은 뒤 ③ 출처를 「AI 요약(검토 필요)」로 두고 저장해 주세요. 프롬프트에는 모델명·점수·태그만 들어가고 이미지·출처 URL 은 들어가지 않습니다.'),
       h('div', { class: 'btn-row', style: 'margin-bottom:10px' },
         h('button', { type: 'button', class: 'btn', onclick: function () { copyText(L.insightPrompt(ins, sc)); } }, 'AI 요약 프롬프트 복사')),
       h('div', { class: 'form-grid' }, field('요약 코멘트', noteTa, { span: true }), field('작성 출처', originSel)),
@@ -1042,13 +1042,13 @@
         h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/report' }, 'Benchmarking Report 로 보기'), h('a', { class: 'btn', href: '#/feedback/scores' }, '점수 비교에 피드백 남기기'))),
       h('section', { class: 'card' }, h('h2', null, '브랜드별 요약'), summaryTbl),
       h('section', { class: 'card' }, h('h2', null, '점수 비교'),
-        h('p', { class: 'note' }, '디자이너 평가(1~5)의 브랜드 평균입니다. 괄호는 축 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
+        h('p', { class: 'note' }, '디자이너 평가(0~5)의 브랜드 평균입니다. 괄호는 축 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
       h('section', { class: 'card' }, h('h2', null, '강·약점'), h('p', { class: 'note' }, '축 평균보다 0.5점 이상 높거나 낮은 축, 출력 대비 중량(kW/t)이 전체 평균과 10% 이상 다른 경우를 적습니다.'), swGrid),
       h('div', { class: 'grid-2' },
         h('section', { class: 'card' }, h('h2', null, 'Design Tag 트렌드'), tagTbl),
         h('section', { class: 'card' }, h('h2', null, 'White Space'), h('p', { class: 'note' }, '전체 평균이 낮은 축부터 적습니다. 가장 높은 브랜드도 4점이 안 되면 「비어 있는 자리」로 표시합니다.'), wsList)),
       noteCard,
-      h('section', { class: 'card' }, h('h2', null, '평가 점수 빠른 입력'), h('p', { class: 'note' }, '1~5점으로 골라 주세요. 바꾸면 바로 저장되고 위 표가 다시 계산됩니다. 점수는 관찰(OBSERVATION)이라 자료 등록 화면의 각 블록에도 같은 칸이 있습니다.'), quick)
+      h('section', { class: 'card' }, h('h2', null, '디자인 평가 — 모델별 점수(0~5)'), h('p', { class: 'note' }, '0~5점으로 골라 주세요(0 도 점수이고, 「-」는 평가 안 함). 이 표는 리포트 「2. 디자인 평가」에 그대로 들어가고, 위 Insight 는 이 점수로 계산합니다. 바꾸면 바로 저장되고 위 표가 다시 계산됩니다. 점수는 관찰(OBSERVATION)이라 자료 등록 화면의 각 블록에도 같은 칸이 있습니다.'), quick)
     ];
   }
 
@@ -1160,11 +1160,11 @@
     var st = opsNow();
     var ops = db.ops;
     var cyc = selectEl('cycle', L.UPDATE_CYCLES.map(function (c) { return { value: c.id, label: c.name }; }), ops.cycle);
-    var staleIn = h('input', { name: 'stale', type: 'number', min: 7, max: 3650, value: String(ops.stale_days), inputmode: 'numeric' });
+    var staleIn = h('input', { name: 'stale', type: 'number', min: 7, max: L.STALE_DAYS_MAX, value: String(ops.stale_days), inputmode: 'numeric' });
     var lastIn = h('input', { name: 'last', type: 'date', value: ops.last_update || '' });
     function saveSettings() {
-      var o = L.restoreOps({ cycle: cyc.value, stale_days: staleIn.value, last_update: lastIn.value, steps: ops.steps, history: ops.history });
-      if (String(o.stale_days) !== String(Number(staleIn.value))) toast('오래된 자료 기준은 7~3650일입니다. ' + o.stale_days + '일로 두었습니다.', true);
+      var o = L.restoreOps({ cycle: cyc.value, stale_days: staleIn.value, last_update: lastIn.value, steps: ops.steps, history: ops.history, defaults: 2 });
+      if (String(o.stale_days) !== String(Number(staleIn.value))) toast('오래된 자료 기준은 7~' + L.STALE_DAYS_MAX + '일(30년)입니다. ' + o.stale_days + '일로 두었습니다.', true);
       db.ops = o; save(); toast('운영 설정을 저장했습니다.'); render();
     }
     var stateText = { none: '갱신 기록이 없습니다', ok: st.daysLeft + '일 남음', soon: st.daysLeft + '일 남음', due: '오늘 예정', overdue: (-st.daysLeft) + '일 지남' }[st.state];
@@ -1185,7 +1185,7 @@
       pageHead('STAGE 10', '정기 업데이트 · 운영 루프', '업데이트 주기를 정하고, 한 바퀴(수집 → 점검 → 평가 → 인사이트 → 리포트 → 피드백 → 보정)를 체크하며 돌립니다. 자동 재수집은 3단계이고, 지금은 예정일·오래된 자료를 알려 주는 방식입니다.'),
       alert,
       h('div', { class: 'tiles' }, [['업데이트 주기', st.cycle.name], ['마지막 갱신일', st.last || '-'], ['다음 예정일', st.next || '-'], ['예정일까지', stateText],
-        ['오래된 자료(' + st.staleDays + '일+)', st.stale.length + '건'], ['수집일 없음', st.undated.length + '건']].map(function (t) {
+        ['오래된 자료(' + L.staleLabel(st.staleDays) + '+)', st.stale.length + '건'], ['수집일 없음', st.undated.length + '건']].map(function (t) {
         return h('div', { class: 'tile' }, h('div', { class: 'k' }, t[0]), h('div', { class: 'v' }, t[1])); })),
       h('div', { class: 'grid-2' },
         h('section', { class: 'card' }, h('h2', null, '이번 사이클 (' + st.stepsDone + ' / ' + st.stepsTotal + ')'), steps,
@@ -1196,7 +1196,7 @@
             else doIt();
           } }, '이번 사이클 완료'))),
         h('section', { class: 'card' }, h('h2', null, '설정'),
-          h('div', { class: 'form-grid' }, field('업데이트 주기', cyc), field('오래된 자료 기준(일)', staleIn, { hint: '수집일이 이보다 오래되면 경고합니다.' }),
+          h('div', { class: 'form-grid' }, field('업데이트 주기', cyc), field('오래된 자료 기준(일)', staleIn, { hint: '수집일이 이보다 오래되면 경고합니다. 기본 5479일 = 15년.' }),
             field('마지막 갱신일', lastIn, { hint: '보통은 「이번 사이클 완료」가 채웁니다.' })),
           h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn', onclick: saveSettings }, '설정 저장')))),
       h('section', { class: 'card' }, h('h2', null, '오래된 자료 · 수집일 없음'),

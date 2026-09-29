@@ -248,6 +248,31 @@ create table if not exists public.ops_history (
 create index if not exists ops_history_owner_idx on public.ops_history (owner_id, done_on desc);
 
 -- ----------------------------------------------------------------------------
+-- 1-d. 2026-09-29 오후 수강생 답변 반영 — 다시 실행하면 이미 만든 표에도 적용된다
+--   · 디자인 평가 점수 0~5 (예전 1~5 값은 그대로 유효)
+--   · 운영 기본값: 주간 · 오래된 자료 15년(5479일), 기준 상한 30년(10958일)
+--   · 리포트 항목에 「디자인 평가」(evaluation) 추가 → 피드백 대상 허용
+--   제약 이름은 PostgreSQL 이 칸 제약에 붙인 이름(<표>_<칸>_check)이다. 지우고 다시 만든다.
+-- ----------------------------------------------------------------------------
+do $sc$
+declare c text;
+begin
+  foreach c in array array['score_exterior', 'score_cabin', 'score_cmf', 'score_service']
+  loop
+    execute format('alter table public.benchmark_model drop constraint if exists %I', 'benchmark_model_' || c || '_check');
+    execute format('alter table public.benchmark_model add constraint %I check (%I between 0 and 5)', 'benchmark_model_' || c || '_check', c);
+  end loop;
+end;
+$sc$;
+alter table public.workspace alter column update_cycle set default 'weekly';
+alter table public.workspace alter column stale_days set default 5479;
+alter table public.workspace drop constraint if exists workspace_stale_days_check;
+alter table public.workspace add constraint workspace_stale_days_check check (stale_days between 7 and 10958);
+alter table public.design_feedback drop constraint if exists design_feedback_target_check;
+alter table public.design_feedback add constraint design_feedback_target_check check (target ~ '^model:M[0-9]{4,}$' or target in
+  ('overview', 'evaluation', 'brands', 'scores', 'sw', 'trend', 'note', 'compare', 'feedback', 'ops'));
+
+-- ----------------------------------------------------------------------------
 -- 1-c. 과제 B — 업무보고 Agent (2026-09-29 추가)
 --
 --  설계: 메일 본문 원문은 DB 에 두지 않는다. 사내 메일은 기밀·개인정보가 섞여 있고

@@ -118,7 +118,7 @@
     ['Wheel Loader', 'komatsu', '예시-WL380', 2023, 18900, 164, 3.4, 1, ['cmf'], false, ['각진 볼륨'], 27],
     ['Wheel Loader', 'liebherr', '예시-WL526', 2024, 15500, 140, 2.9, 4, ['fq'], false, ['라운드 후드'], 14],
     /* 2026-09-29 수강생 요청으로 경쟁사에 Mecalac 추가 — 휠형 굴착기 예시(가상) */
-    ['Excavator', 'mecalac', '예시-MW12', 2025, 11900, 85, 0.4, 5, ['fq', 'cab'], true, ['슬림 필러', '넓은 글라스'], 240]
+    ['Excavator', 'mecalac', '예시-MW12', 2025, 11900, 85, 0.4, 5, ['fq', 'cab'], true, ['슬림 필러', '넓은 글라스'], 5600]  // 수집 15년 넘음 — 오래된 자료 경고 시연(가상)
   ];
 
   /* 디자이너 평가 점수(1~5) 예시 — [Exterior, Cabin/HMI, CMF, Service/Safety], 모두 가상 값. null = 미평가 */
@@ -176,10 +176,10 @@
     db.scopes = [sc.scope];
     db.activeScope = sc.scope.scope_id;
     db._sample = true;
-    /* 운영 루프 시연: 한 달 전 갱신 기록 1건 */
-    db.ops = L.restoreOps({ cycle: 'monthly', stale_days: 180,
-      last_update: L.toDateStr(new Date(base.getFullYear(), base.getMonth() - 1, base.getDate())),
-      history: [{ date: L.toDateStr(new Date(base.getFullYear(), base.getMonth() - 1, base.getDate())), cycle: 'monthly', steps_done: ['collect', 'qa'], note: '예시 — 1차 수집', models: 14 }] });
+    /* 운영 루프 시연: 주간 주기(2026-09-29 오후 수강생 답변), 한 주 전 갱신 기록 1건 */
+    var weekAgo = L.toDateStr(new Date(base.getFullYear(), base.getMonth(), base.getDate() - 7));
+    db.ops = L.restoreOps({ cycle: 'weekly', stale_days: L.STALE_DAYS_DEFAULT, defaults: 2, last_update: weekAgo,
+      history: [{ date: weekAgo, cycle: 'weekly', steps_done: ['collect', 'qa'], note: '예시 — 1차 수집', models: 14 }] });
     return db;
   }
 

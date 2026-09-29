@@ -263,12 +263,19 @@ test('restoreDb: 깨진 값 무시, 비교함은 있는 모델만', () => {
 });
 
 console.log('평가 점수·인사이트 (2026-09-29)');
-test('cleanScore: 1~5 정수만, 나머지는 빈 값', () => {
+test('cleanScore: 0~5 정수만(2026-09-29 오후 답변), 나머지는 빈 값 · 예전 1~5 값은 그대로', () => {
   assert.equal(L.cleanScore('4'), 4);
   assert.equal(L.cleanScore('4점'), 4);
   assert.equal(L.cleanScore(3.6), 4);
-  assert.equal(L.cleanScore(0), '');
+  assert.equal(L.cleanScore(0), 0);            // 0 도 점수
+  assert.equal(L.cleanScore('0'), 0);
+  assert.equal(L.cleanScore(-1), '');
   assert.equal(L.cleanScore(6), '');
+  assert.equal(L.cleanScore(null), '');        // 빈칸(평가 안 함)은 0 이 아니다
+  assert.deepEqual(L.SCORE_OPTIONS, ['0', '1', '2', '3', '4', '5']);
+  assert.equal(L.cleanModel({ brand: 'x', model_name: 'y', score_cmf: 1 }).score_cmf, 1); // 예전 1~5 데이터 호환
+  assert.equal(L.displayValue({ score_cabin: 0 }, L.fieldByKey('score_cabin')), '0 / 5');
+  assert.equal(L.fieldByKey('score_cmf').label, 'CMF 평가(0~5)');
   assert.equal(L.cleanScore(''), '');
   assert.equal(L.cleanModel({ brand: 'x', model_name: 'y', score_cmf: '7' }).score_cmf, '');
   assert.equal(L.displayValue({ score_cabin: 5 }, L.fieldByKey('score_cabin')), '5 / 5');
@@ -318,14 +325,16 @@ test('tagTrends: 「넓은 글라스」 3건 50%, 최근 2개 연식 3건', () =
 test('whiteSpace·headline', () => {
   assert.equal(ins.whitespace[0].name, 'CMF');       // 3.17 동점이면 축 순서
   assert.equal(ins.whitespace[0].open, false);       // Volvo 4점
-  assert.ok(ins.headline[0].includes('Volvo CE(4점)'));
-  assert.ok(ins.headline[0].includes('Bobcat(3점)'));
+  const brandLine = ins.headline.find(x => x.startsWith('평가 평균이 가장 높은 브랜드'));
+  assert.ok(brandLine.includes('Volvo CE(4점)') && brandLine.includes('Bobcat(3점)'));
+  assert.equal(ins.headline[0], '디자인 평가: 모델 6건 중 6건 평가(4축 모두 입력 6건), 척도 0~5점.');
   const ws = L.whiteSpace(L.scoreComparison([L.cleanModel({ brand: 'JCB', model_name: 'a', score_cmf: 3 })]));
   assert.equal(ws[0].open, true);                    // 최고도 4점 미만
 });
 test('점수 없는 자료면 안내 문장, 빈 목록도 오류 없음', () => {
   const x = L.buildInsight([L.cleanModel({ brand: 'JCB', model_name: 'a' })]);
-  assert.ok(x.headline[0].includes('평가 점수가 아직 없습니다'));
+  assert.ok(x.headline.some(h => h.includes('평가 점수가 아직 없습니다')));
+  assert.ok(x.headline[0].includes('1건 중 0건 평가'));
   assert.equal(L.buildInsight([]).summary.length, 0);
 });
 test('insightPrompt: 수치·태그만, 출처 URL 은 넣지 않음', () => {
@@ -372,18 +381,22 @@ test('nextDue: 주간·월간(말일 보정)·분기', () => {
   assert.equal(L.nextDue('2026-11-30', 'quarterly'), '2027-02-28');
   assert.equal(L.nextDue('', 'monthly'), '');
 });
-test('opsStatus: 예시는 한 달 전 갱신 → 오늘 예정, 이틀 뒤면 지남', () => {
+test('opsStatus: 예시는 주간 주기·한 주 전 갱신 → 오늘 예정, 이틀 뒤면 지남', () => {
   const a = L.opsStatus(db.ops, db.models, NOW);
-  assert.deepEqual([a.last, a.next, a.daysLeft, a.state], ['2026-08-28', '2026-09-28', 0, 'due']);
+  assert.deepEqual([a.cycle.id, a.last, a.next, a.daysLeft, a.state], ['weekly', '2026-09-21', '2026-09-28', 0, 'due']);
   const b = L.opsStatus(db.ops, db.models, new Date(2026, 8, 30));
   assert.deepEqual([b.daysLeft, b.state], [-2, 'overdue']);
   assert.equal(L.opsStatus(L.defaultOps(), [], NOW).state, 'none');
 });
-test('오래된 자료: 180일 넘은 Mecalac 예시 1건, 수집일 없는 XCMG 1건', () => {
+test('오래된 자료: 기준 15년(5479일) — 넘은 Mecalac 예시 1건, 수집일 없는 XCMG 1건', () => {
   const a = L.opsStatus(db.ops, db.models, NOW);
-  assert.deepEqual(a.stale.map(x => x.model_name + ':' + x.age), ['예시-MW12:240']);
+  assert.equal(a.staleDays, 5479);
+  assert.deepEqual(a.stale.map(x => x.model_name + ':' + x.age), ['예시-MW12:5600']);
   assert.deepEqual(a.undated.map(x => x.model_name), ['예시-EX215C']);
-  assert.deepEqual(L.staleModels(db.models, NOW, 26).stale.map(x => x.age), [240, 27]); // 기준을 줄이면 WL380(27일)도, 오래된 순
+  assert.deepEqual(L.staleModels(db.models, NOW, 26).stale.map(x => x.age), [5600, 27]); // 기준을 줄이면 WL380(27일)도, 오래된 순
+  assert.equal(L.staleModels(db.models, NOW, 5601).stale.length, 0);                     // 경계: 5600일 < 5601일
+  assert.equal(L.staleLabel(5479), '15년(5479일)');
+  assert.equal(L.staleLabel(180), '180일');
 });
 test('단계 체크 → 사이클 완료: 이력 추가, 마지막 갱신일 오늘, 체크 비움', () => {
   let o = L.toggleStep(db.ops, 'collect', true, NOW);
@@ -392,14 +405,30 @@ test('단계 체크 → 사이클 완료: 이력 추가, 마지막 갱신일 오
   assert.equal(L.opsStatus(o, [], NOW).stepsDone, 2);
   const c = L.completeCycle(o, new Date(2026, 8, 29), '신규 2건 반영', 15);
   assert.equal(c.last_update, '2026-09-29');
-  assert.deepEqual(c.history[0], { date: '2026-09-29', cycle: 'monthly', steps_done: ['collect', 'report'], note: '신규 2건 반영', models: 15 });
+  assert.deepEqual(c.history[0], { date: '2026-09-29', cycle: 'weekly', steps_done: ['collect', 'report'], note: '신규 2건 반영', models: 15 });
   assert.equal(c.history.length, 2);
   assert.deepEqual(c.steps, {});
-  assert.equal(L.nextDue(c.last_update, c.cycle), '2026-10-29');
+  assert.equal(L.nextDue(c.last_update, c.cycle), '2026-10-06');
 });
 test('restoreOps: 잘못된 값은 기본값', () => {
   const o = L.restoreOps({ cycle: 'daily', stale_days: 1, last_update: '언젠가', steps: { qa: '2026-09-01', x: 1 } });
-  assert.deepEqual([o.cycle, o.stale_days, o.last_update, Object.keys(o.steps)], ['monthly', 180, '', ['qa']]);
+  assert.deepEqual([o.cycle, o.stale_days, o.last_update, Object.keys(o.steps)], ['weekly', 5479, '', ['qa']]);
+  assert.equal(L.restoreOps({ stale_days: 10958, cycle: 'quarterly' }).stale_days, 10958);   // 30년까지
+  assert.equal(L.restoreOps({ stale_days: 10959, cycle: 'quarterly' }).stale_days, 5479);
+});
+test('기본값 변경(주간·15년): 예전 기본값(월간·180일) 저장본은 한 번 옮기고, 사용자가 고른 값은 둠', () => {
+  assert.deepEqual([L.defaultOps().cycle, L.defaultOps().stale_days], ['weekly', 5479]);
+  const old = L.restoreOps({ cycle: 'monthly', stale_days: 180, last_update: '2026-09-01' });
+  assert.deepEqual([old.cycle, old.stale_days, old.last_update, old.defaults], ['weekly', 5479, '2026-09-01', 2]);
+  const kept = L.restoreOps({ cycle: 'monthly', stale_days: 180, defaults: 2 });            // 옮긴 뒤 사용자가 다시 고른 값
+  assert.deepEqual([kept.cycle, kept.stale_days], ['monthly', 180]);
+  assert.deepEqual([L.restoreOps({ cycle: 'monthly', stale_days: 365 }).cycle, L.restoreOps({ cycle: 'monthly', stale_days: 365 }).stale_days], ['monthly', 365]);
+  assert.equal(L.restoreOps(L.restoreOps({ cycle: 'monthly', stale_days: 180 })).cycle, 'weekly'); // 다시 읽어도 그대로
+});
+test('Mecalac: 모든 장비군으로 구분(2026-09-29 오후 답변) — 굴착기·휠로더 Scope 모두 선택 가능', () => {
+  for (const [eq, ton] of [['Excavator', 'MED'], ['Wheel Loader', 'SML']])
+    assert.deepEqual(L.validateScope({ equipment_type: eq, tonnage_class: ton, brands: ['Mecalac'], purposes: ['Exterior'] }), []);
+  assert.equal(L.brandAvailability(db.models, 'Wheel Loader', 'SML')['Mecalac'], 0);          // 목록에 있고 건수만 0
 });
 
 console.log('Benchmarking Report');
@@ -416,16 +445,32 @@ test('buildReport: Scope 6건 기준, 비교표·피드백·운영 포함', () =
   assert.equal(rep.ops.state, 'due');
   assert.equal(L.buildReport(dbr, { now: NOW, useScope: false }).overview.models, 15);
 });
-test('reportSheets: 시트 8개, 브랜드요약 6행', () => {
+test('reportSheets: 시트 9개(디자인평가 추가), 디자인평가 6행·브랜드요약 6행', () => {
   const sh = L.reportSheets(rep);
-  assert.deepEqual(sh.map(x => x.name), ['요약', '브랜드요약', '점수비교', '강약점', '태그트렌드', '선택비교', '전문가피드백', '운영']);
+  assert.deepEqual(sh.map(x => x.name), ['요약', '디자인평가', '브랜드요약', '점수비교', '강약점', '태그트렌드', '선택비교', '전문가피드백', '운영']);
   assert.equal(sh[1].aoa.length, 7);
-  assert.equal(sh[6].aoa[3][4], '<script>alert(1)</script> 확인'); // 엑셀은 원문 그대로
+  assert.deepEqual(sh[1].aoa[0].slice(2, 4), ['Exterior 조형(0~5)', 'Cabin / HMI(0~5)']);
+  assert.equal(sh[2].aoa.length, 7);
+  assert.equal(sh[7].aoa[3][4], '<script>alert(1)</script> 확인'); // 엑셀은 원문 그대로
   assert.ok(!L.reportSheets(L.buildReport({ ...dbr, compare: [] }, { now: NOW })).some(x => x.name === '선택비교'));
 });
-test('reportHtml: 항목 9개(data-section), 글자는 이스케이프', () => {
+test('디자인 평가(모델별 점수): 브랜드 순서, 모델 평균, 0 점도 평균에 들어감', () => {
+  const ev = rep.insight.evaluations;
+  assert.equal(ev.length, 6);
+  assert.equal(ev[0].short, 'CAT');
+  const volvo = ev.find(e => e.short === 'Volvo CE');
+  assert.deepEqual([volvo.avg, volvo.rated, volvo.complete], [4, 4, true]);
+  const z = L.modelEvaluations([L.cleanModel({ brand: 'JCB', model_name: 'z', score_exterior: 0, score_cmf: 4 })])[0];
+  assert.deepEqual([z.avg, z.rated, z.complete, z.scores.score_cabin], [2, 2, false, null]);
+});
+test('reportHtml: 항목 10개(2번 디자인 평가 + 3~6번 평가 기반 Insight), 글자는 이스케이프', () => {
   const html = L.reportHtml(rep);
+  assert.equal(L.REPORT_SECTIONS.length, 10);
+  assert.equal(L.REPORT_SECTIONS[1].id, 'evaluation');
+  assert.ok(L.REPORT_SECTIONS.slice(2, 6).every(x => x.name.includes('Insight')));
   assert.equal((html.match(/data-section="/g) || []).length, L.REPORT_SECTIONS.length);
+  assert.ok(html.indexOf('data-section="evaluation"') < html.indexOf('data-section="brands"'));
+  assert.ok(html.includes('예시-EX230'));
   assert.ok(html.startsWith('<!doctype html>'));
   assert.ok(!html.includes('<script>alert(1)'));
   assert.ok(html.includes('&lt;script&gt;alert(1)'));

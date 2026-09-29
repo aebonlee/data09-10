@@ -198,7 +198,22 @@ begin
   perform public._assert(true, 'Mecalac 은 Scope 경쟁사로 고를 수 있다 (2026-09-29 추가)');
   perform public._assert_raises($s$insert into public.benchmark_model (model_id, equipment_type, brand, model_name, score_cmf)
      values ('M0008', 'Excavator', 'JCB', 's', 6)$s$,
-    '23514', '평가 점수는 1~5 이다');
+    '23514', '평가 점수는 0~5 이다 (6 은 막힌다)');
+  perform public._assert_raises($s$insert into public.benchmark_model (model_id, equipment_type, brand, model_name, score_cmf)
+     values ('M0009', 'Excavator', 'JCB', 's9', -1)$s$,
+    '23514', '평가 점수는 음수가 될 수 없다');
+  insert into public.benchmark_model (model_id, equipment_type, brand, model_name, score_exterior, score_cmf)
+    values ('M0010', 'Excavator', 'JCB', '영점', 0, 1);
+  perform public._assert(true, '평가 점수 0 과 예전 척도의 1 은 저장된다 (2026-09-29 오후 0~5)');
+  insert into public.benchmark_scope (scope_id, equipment_type, tonnage_class, brands, purposes)
+    values ('WHL-SML-001-X', 'Wheel Loader', 'SML', '{Mecalac}', '{Exterior}');
+  perform public._assert(true, 'Mecalac 은 휠로더 Scope 에도 고를 수 있다 (모든 장비로 구분)');
+  perform public._assert_eq((select column_default from information_schema.columns where table_name = 'workspace' and column_name = 'update_cycle'),
+    '''weekly''::text', '업데이트 주기 기본값은 주간이다');
+  perform public._assert_eq((select column_default from information_schema.columns where table_name = 'workspace' and column_name = 'stale_days'),
+    '5479', '오래된 자료 기준 기본값은 15년(5479일)이다');
+  update public.workspace set stale_days = 10958;
+  perform public._assert_raises($s$update public.workspace set stale_days = 10959$s$, '23514', '오래된 자료 기준은 30년(10958일)까지다');
   perform public._assert_raises($s$insert into public.benchmark_scope (scope_id, equipment_type, tonnage_class, brands, purposes)
      values ('EXC-MED-000-X', 'Excavator', 'MED', '{}', '{Exterior}')$s$,
     '23514', 'Scope 경쟁사는 1개 이상이어야 한다');
@@ -291,6 +306,9 @@ begin
   perform public._assert_raises($s$insert into public.design_feedback (feedback_id, target, type, rating, author)
      values ('FB0003', 'scores', 'Taxonomy·기준 조정', 2, '디자이너A')$s$,
     '23514', '「동의」가 아닌 피드백은 코멘트가 필요하다');
+  insert into public.design_feedback (feedback_id, target, type, rating, comment, author)
+    values ('FB0006', 'evaluation', '분석 결과 수정 필요', 3, '0점 기준 확인', '디자이너A');
+  perform public._assert(true, '리포트 「디자인 평가」 항목(evaluation)에 피드백을 남길 수 있다');
   perform public._assert_raises($s$insert into public.design_feedback (feedback_id, target, type, rating, comment, author)
      values ('FB0004', 'unknown', '예외 사례 등록', 2, 'x', '디자이너A')$s$,
     '23514', '피드백 대상은 리포트 항목 9개 또는 model:M0000 형식이다');
