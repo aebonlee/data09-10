@@ -148,7 +148,7 @@ set local role anon;
 do $t$
 declare t text;
 begin
-  foreach t in array array['workspace','benchmark_scope','benchmark_model','model_media']
+  foreach t in array array['workspace','benchmark_scope','benchmark_model','model_media','design_feedback','ops_history']
   loop
     perform public._assert_raises(format('select * from public.%I', t), '42501', 'anon 은 ' || t || ' 를 읽을 수 없다');
   end loop;
@@ -175,7 +175,7 @@ begin
 
   perform public._assert_eq((select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
      join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'),
-    16::bigint, '정책 수가 16개다 (4개 표 × 4, 재실행해도 늘지 않는다)');
+    21::bigint, '정책 수가 21개다 (4개 표 × 4 + 피드백 3 + 운영 이력 2, 재실행해도 늘지 않는다)');
 end $t$;
 
 -- ----------------------------------------------------------------------------
@@ -191,7 +191,13 @@ begin
     '23514', 'Wheel Loader 에 굴착기 전용 톤급(MIC)은 고를 수 없다');
   perform public._assert_raises($s$insert into public.benchmark_scope (scope_id, equipment_type, tonnage_class, brands, purposes)
      values ('EXC-MED-001-X', 'Excavator', 'MED', '{"없는 회사"}', '{Exterior}')$s$,
-    '23514', 'Scope 경쟁사는 부록 B 13개사 안에서만 고른다');
+    '23514', 'Scope 경쟁사는 부록 B 13개사 + Mecalac 안에서만 고른다');
+  insert into public.benchmark_scope (scope_id, equipment_type, tonnage_class, brands, purposes)
+    values ('EXC-MED-001-V', 'Excavator', 'MED', '{Mecalac}', '{Serviceability}');
+  perform public._assert(true, 'Mecalac 은 Scope 경쟁사로 고를 수 있다 (2026-09-29 추가)');
+  perform public._assert_raises($s$insert into public.benchmark_model (model_id, equipment_type, brand, model_name, score_cmf)
+     values ('M0008', 'Excavator', 'JCB', 's', 6)$s$,
+    '23514', '평가 점수는 1~5 이다');
   perform public._assert_raises($s$insert into public.benchmark_scope (scope_id, equipment_type, tonnage_class, brands, purposes)
      values ('EXC-MED-000-X', 'Excavator', 'MED', '{}', '{Exterior}')$s$,
     '23514', 'Scope 경쟁사는 1개 이상이어야 한다');
@@ -254,6 +260,63 @@ end $t$;
 commit;
 
 -- ----------------------------------------------------------------------------
+-- 5-b. 기록성 표 (2026-09-29) — 피드백은 상태만 바꾸고, 내용 수정·삭제는 막힌다
+-- ----------------------------------------------------------------------------
+begin;
+set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local role authenticated;
+do $t$
+declare n bigint;
+begin
+  insert into public.design_feedback (feedback_id, target, type, rating, comment, author)
+    values ('FB0001', 'scores', '분석 결과 수정 필요', 3, 'CMF 기준 재검토', '디자이너A');
+  insert into public.design_feedback (feedback_id, target, type, rating, author)
+    values ('FB0002', 'model:M0001', '동의(수정 없음)', 5, '디자이너B');
+  insert into public.ops_history (done_on, cycle, steps_done, note, models)
+    values ('2026-09-29', 'monthly', '{collect,qa}', '1차 수집', 15);
+  update public.design_feedback set status = '반영됨', resolved_at = now() where feedback_id = 'FB0001';
+  get diagnostics n = row_count;
+  perform public._assert_eq(n, 1::bigint, '피드백 상태(status·resolved_at)는 바꿀 수 있다');
+  perform public._assert_raises($s$update public.design_feedback set comment = '고쳐 씀' where feedback_id = 'FB0001'$s$,
+    '42501', '피드백 코멘트는 고칠 수 없다 (칸 단위 GRANT)');
+  perform public._assert_raises($s$update public.design_feedback set rating = 5$s$,
+    '42501', '피드백 평가 점수는 고칠 수 없다');
+  perform public._assert_raises($s$delete from public.design_feedback$s$,
+    '42501', '피드백 기록은 지울 수 없다');
+  perform public._assert_raises($s$update public.ops_history set note = 'x'$s$,
+    '42501', '운영 이력은 고칠 수 없다');
+  perform public._assert_raises($s$delete from public.ops_history$s$,
+    '42501', '운영 이력은 지울 수 없다');
+  perform public._assert_raises($s$insert into public.design_feedback (feedback_id, target, type, rating, author)
+     values ('FB0003', 'scores', 'Taxonomy·기준 조정', 2, '디자이너A')$s$,
+    '23514', '「동의」가 아닌 피드백은 코멘트가 필요하다');
+  perform public._assert_raises($s$insert into public.design_feedback (feedback_id, target, type, rating, comment, author)
+     values ('FB0004', 'unknown', '예외 사례 등록', 2, 'x', '디자이너A')$s$,
+    '23514', '피드백 대상은 리포트 항목 9개 또는 model:M0000 형식이다');
+  perform public._assert_raises($s$insert into public.design_feedback (feedback_id, target, type, rating, comment, author)
+     values ('FB0005', 'scores', '예외 사례 등록', 7, 'x', '디자이너A')$s$,
+    '23514', '피드백 평가는 1~5 이다');
+  perform public._assert_raises($s$update public.workspace set update_cycle = 'daily'$s$,
+    '23514', '업데이트 주기는 주간·격주·월간·분기만 받는다');
+end $t$;
+commit;
+
+-- B 는 A 의 피드백·운영 이력을 보지 못한다
+begin;
+set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+set local role authenticated;
+do $t$
+declare n bigint;
+begin
+  perform public._assert_eq((select count(*) from public.design_feedback) + (select count(*) from public.ops_history), 0::bigint,
+    'B 에게는 A 의 피드백·운영 이력이 보이지 않는다');
+  update public.design_feedback set status = '열림';
+  get diagnostics n = row_count;
+  perform public._assert_eq(n, 0::bigint, 'B 는 A 의 피드백 상태를 바꿀 수 없다');
+end $t$;
+commit;
+
+-- ----------------------------------------------------------------------------
 -- 6. 함수 권한 · search_path · 표 권한
 -- ----------------------------------------------------------------------------
 do $t$
@@ -287,6 +350,8 @@ begin
 end $t$;
 
 -- 정리
+delete from public.design_feedback;
+delete from public.ops_history;
 delete from public.model_media;
 delete from public.benchmark_model;
 delete from public.benchmark_scope;

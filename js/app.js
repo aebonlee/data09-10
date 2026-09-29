@@ -1,5 +1,6 @@
 /* Design Benchmarking Agent — 화면
-   화면 목록(기획서 5장 MVP): Scope Setup · Status Dashboard · Card Gallery · Side-by-Side · 자료 등록 · Detail · 가져오기/내보내기 */
+   화면 목록(기획서 5장 MVP): Scope Setup · Status Dashboard · Card Gallery · Side-by-Side · 자료 등록 · Detail · 가져오기/내보내기
+   2026-09-29 추가: 07 Insight · 08 Benchmarking Report · 09 전문가 피드백 · 10 운영 루프 */
 (function () {
   'use strict';
   var L = window.DBLogic, S = window.DBStore, Sample = window.DBSample;
@@ -116,16 +117,25 @@
     ['#/gallery', '03', 'Card Gallery', '이미지·스펙 탐색'],
     ['#/compare', '04', 'Side-by-Side', '모델 비교·비교표'],
     ['#/edit', '05', '자료 등록', '표준 Schema 입력'],
-    ['#/data', '06', '가져오기·내보내기', '엑셀·CSV·백업']
+    ['#/data', '06', '가져오기·내보내기', '엑셀·CSV·백업'],
+    ['#/insight', '07', 'Insight', '요약·점수·강약점'],
+    ['#/report', '08', 'Benchmarking Report', '인쇄·PDF·xlsx·HTML'],
+    ['#/feedback', '09', '전문가 피드백', '항목별 평가·코멘트'],
+    ['#/ops', '10', '운영 루프', '정기 업데이트·신선도']
   ];
   function renderChrome(route) {
     route = route || location.hash || '#/scope';
     var nav = document.getElementById('nav'); nav.innerHTML = '';
+    var openFb = (db.feedback || []).filter(function (x) { return x.status !== '반영됨'; }).length;
+    var ost = db.models.length ? opsNow() : null;
+    var opsBadge = !ost ? '' : ost.state === 'overdue' ? '예정일 ' + (-ost.daysLeft) + '일 지남' : ost.state === 'due' ? '오늘 업데이트 예정' : ost.stale.length ? '오래된 자료 ' + ost.stale.length + '건' : '';
     NAV.forEach(function (n) {
       var cur = route === n[0] || route.indexOf(n[0] + '/') === 0 || (n[0] === '#/gallery' && route.indexOf('#/model/') === 0);
       nav.appendChild(h('a', { href: n[0], 'aria-current': cur ? 'page' : null },
         h('span', { class: 'no' }, n[1]), h('span', { class: 't' }, n[2]), h('span', { class: 's' }, n[3]),
-        n[0] === '#/compare' && db.compare.length ? h('span', { class: 's' }, '비교함 ' + db.compare.length + '/' + L.MAX_COMPARE) : null));
+        n[0] === '#/compare' && db.compare.length ? h('span', { class: 's' }, '비교함 ' + db.compare.length + '/' + L.MAX_COMPARE) : null,
+        n[0] === '#/feedback' && openFb ? h('span', { class: 's' }, '열림 ' + openFb + '건') : null,
+        n[0] === '#/ops' && opsBadge ? h('span', { class: 's badge-warn' }, opsBadge) : null));
     });
     var chip = document.getElementById('scopeChip'); chip.innerHTML = '';
     var sc = scopeNow();
@@ -255,7 +265,7 @@
           h('h3', null, 'Product Type'), seg,
           h('h3', { style: 'margin-top:16px' }, 'Tonnage ', h('small', { class: 'note' }, '— 부록 C, 운전중량 기준')), ton,
           h('div', { class: 'page-head', style: 'margin:16px 0 8px' },
-            h('h3', { class: 'titles', style: 'margin:0' }, 'Competitor brands ', h('small', { class: 'note' }, '— 부록 B 13개사, 1개 이상')),
+            h('h3', { class: 'titles', style: 'margin:0' }, 'Competitor brands ', h('small', { class: 'note' }, '— 부록 B ' + (L.BRANDS.length - 1) + '개사 + Mecalac, 총 ' + L.BRANDS.length + '개사 중 1개 이상')),
             h('div', { class: 'btn-row' },
               h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { setAll(true); } }, '전체 선택'),
               h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { setAll(false); } }, '전체 해제'))),
@@ -587,6 +597,7 @@
   function control(f, m) {
     var v = m[f.key];
     if (f.type === 'select') return selectEl(f.key, f.options, v, '선택 안 함');
+    if (f.type === 'score') return selectEl(f.key, ['1', '2', '3', '4', '5'], v, '평가 안 함');
     if (f.type === 'tags') return h('input', { name: f.key, value: (v || []).join(', '), placeholder: '쉼표로 구분' });
     if (f.type === 'date') return h('input', { name: f.key, type: 'date', value: L.toDateStr(v) || '' });
     if (f.type === 'number') return h('input', { name: f.key, type: 'text', inputmode: 'decimal', value: v === '' || v == null ? '' : String(v), placeholder: f.unit ? '숫자 (' + f.unit + ') · 단위 적으면 변환' : '' });
@@ -891,7 +902,7 @@
       importPanel(),
       h('div', { class: 'grid-2' },
         h('section', { class: 'card' }, h('h2', null, '예시 데이터'),
-          h('p', null, '가상의 모델 14건(「예시-」 모델명, 도형 이미지)과 Scope 1개를 넣습니다. 실제 경쟁사 제품 정보가 아닙니다.'),
+          h('p', null, '가상의 모델 ' + Sample.build(new Date()).models.length + '건(「예시-」 모델명, 도형 이미지, 평가 점수)과 Scope 1개, 운영 루프 이력 1건을 넣습니다. 실제 경쟁사 제품 정보가 아닙니다.'),
           h('p', { class: 'note' }, '열 연결 연습용 파일: samples/예시데이터_사내정리표.xlsx · .csv'),
           h('div', { class: 'btn-row' },
             h('button', { type: 'button', class: 'btn btn-primary', onclick: loadSample }, '예시 데이터 불러오기'),
@@ -911,6 +922,303 @@
     ];
   }
 
+  /* ══ 2026-09-29 추가 — 수강생 Proto Web(End-to-End 13단계) 중 08 Insight · 10 Report · 11 Designer Validation · 13 Scheduled Update ══
+     계산은 모두 logic.js(buildInsight · buildReport · feedback* · ops*)에 있고, 여기서는 그리기만 합니다. */
+
+  /* 인사이트·리포트 공통 대상 선택 — Scope 가 있으면 Scope 범위, 끄면 장비군 전체 */
+  var insState = { useScope: true, equipment_type: '' };
+  function targetOpts() {
+    var sc = scopeNow();
+    return sc && insState.useScope ? { useScope: true } : { useScope: false, equipment_type: insState.equipment_type };
+  }
+  function targetTools() {
+    var sc = scopeNow();
+    var usingScope = sc && insState.useScope;
+    var etSel = selectEl('et', L.PRODUCTS.map(function (p) { return p.name; }), insState.equipment_type, '전체 장비군');
+    etSel.disabled = !!usingScope;
+    etSel.addEventListener('change', function () { insState.equipment_type = etSel.value; render(); });
+    return h('div', { class: 'btn-row no-print' },
+      sc ? h('label', { class: 'opt', style: 'min-height:44px;align-items:center' }, h('input', {
+        type: 'checkbox', checked: !!usingScope, onchange: function (e) { insState.useScope = e.target.checked; render(); }
+      }), h('span', { class: 't' }, 'Scope ' + sc.scope_id + ' 범위만')) : null,
+      h('label', { class: 'field' }, h('span', { class: 'sr' }, '장비군'), etSel));
+  }
+  function scoreCell(v, d) {
+    var cls = 'num' + (d == null ? '' : d >= 0.5 ? ' up' : d <= -0.5 ? ' down' : '');
+    return h('td', { class: cls }, v == null ? '-' : v + (d == null ? '' : ' (' + (d > 0 ? '+' : '') + d + ')'));
+  }
+  function copyText(text) {
+    function fallback() {
+      var ta = h('textarea', { readonly: true, style: 'width:100%;min-height:260px' }, text);
+      dialog('프롬프트를 복사해 주세요', [h('p', { class: 'note' }, '이 브라우저는 자동 복사를 막고 있습니다. 아래 글을 전부 선택(Ctrl+A)해 복사해 주세요.'), ta]);
+      setTimeout(function () { ta.focus(); ta.select(); }, 50);
+    }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(function () { toast('프롬프트를 복사했습니다. ChatGPT 등에 붙여 넣어 주세요.'); }, fallback);
+    else fallback();
+  }
+
+  /* ── 07 Insight ─────────────────────── */
+  function viewInsight() {
+    var models = L.reportModels(db, targetOpts());
+    var sc = targetOpts().useScope ? scopeNow() : null;
+    var ins = L.buildInsight(models);
+    var head = pageHead('STAGE 07', 'Insight', 'BM 결과를 브랜드별 요약·점수 비교·강약점·Design Tag 트렌드·White Space 로 정리합니다. 대상: ' +
+      (sc ? 'Scope ' + sc.scope_id : insState.equipment_type || '전체 장비군') + ' · 모델 ' + models.length + '건', targetTools());
+    if (!models.length) return [head, h('div', { class: 'card empty' }, h('p', null, '대상 모델이 없습니다. 자료를 등록하거나 범위를 넓혀 주세요.'),
+      h('a', { class: 'btn btn-primary', href: '#/edit' }, '자료 등록'))];
+
+    var axes = ins.scores.axes;
+    var summaryTbl = h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+      h('thead', null, h('tr', null, ['브랜드', '모델', '평가 입력', '평가 평균', '운전중량(t)', '평균 출력(kW)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일', '누락'].map(function (t, i) {
+        return h('th', { scope: 'col', class: i >= 1 && i <= 6 ? 'num' : null }, t); }))),
+      h('tbody', null, ins.summary.map(function (r) {
+        return h('tr', null, h('th', { scope: 'row' }, r.short), h('td', { class: 'num' }, String(r.models)), h('td', { class: 'num' }, String(r.scored)),
+          h('td', { class: 'num' }, r.overall == null ? '-' : String(r.overall)),
+          h('td', { class: 'num' }, r.weight ? r.weight.min + ' ~ ' + r.weight.max : '-'), h('td', { class: 'num' }, r.power == null ? '-' : String(r.power)),
+          h('td', { class: 'num' }, r.pwr == null ? '-' : String(r.pwr)), h('td', null, r.years ? r.years.min + ' ~ ' + r.years.max : '-'),
+          h('td', null, r.tags.map(function (t) { return h('span', { class: 'tag muted' }, t.tag + ' ' + t.count); })),
+          h('td', null, r.latest || '-'), h('td', { class: 'num' + (r.incomplete ? '' : ' zero') }, String(r.incomplete)));
+      }))));
+    var scoreTbl = h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '브랜드'), axes.map(function (a) { return h('th', { scope: 'col', class: 'num' }, a.name); }), h('th', { scope: 'col', class: 'num' }, '평균'))),
+      h('tbody', null, ins.scores.rows.map(function (r) {
+        return h('tr', null, h('th', { scope: 'row' }, r.short), axes.map(function (a) { return scoreCell(r.scores[a.key], r.diff[a.key]); }), h('td', { class: 'num' }, r.overall == null ? '-' : String(r.overall)));
+      }), h('tr', { class: 'sum' }, h('th', { scope: 'row' }, '축 평균'), axes.map(function (a) { return h('td', { class: 'num' }, a.avg == null ? '-' : a.avg + ' (' + a.n + '건)'); }), h('td', null, '')))));
+    var swGrid = h('div', { class: 'sw-grid' }, ins.sw.map(function (r) {
+      return h('div', { class: 'sw-card' }, h('h3', null, r.short),
+        r.strengths.length ? [h('div', { class: 'sw-k ok' }, '강점'), h('ul', null, r.strengths.map(function (x) { return h('li', null, x.text); }))] : null,
+        r.weaknesses.length ? [h('div', { class: 'sw-k bad' }, '약점'), h('ul', null, r.weaknesses.map(function (x) { return h('li', null, x.text); }))] : null,
+        !r.strengths.length && !r.weaknesses.length ? h('p', { class: 'note' }, '평균과 큰 차이가 없습니다.') : null,
+        r.notes.length ? h('ul', { class: 'note' }, r.notes.map(function (x) { return h('li', null, x); })) : null);
+    }));
+    var tagTbl = ins.tags.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+      h('thead', null, h('tr', null, ['Design Tag', '건수', '비율', '최근 2개 연식', '브랜드'].map(function (t, i) { return h('th', { scope: 'col', class: i && i < 4 ? 'num' : null }, t); }))),
+      h('tbody', null, ins.tags.slice(0, 15).map(function (t) {
+        return h('tr', null, h('th', { scope: 'row' }, t.tag), h('td', { class: 'num' }, String(t.count)), h('td', { class: 'num' }, t.share + '%'), h('td', { class: 'num' }, String(t.recent)), h('td', null, t.brands.join(', ')));
+      })))) : h('p', { class: 'note' }, 'Design Tag 가 없습니다. 자료 등록의 Design 블록에 쉼표로 적어 주세요.');
+    var wsList = h('ul', null, ins.whitespace.map(function (w) {
+      return h('li', null, w.name + ' 평균 ' + w.avg + '점 · 최고 ' + (w.best ? L.brandShort(w.best.brand) + ' ' + w.best.value + '점' : '-'),
+        w.open ? h('span', { class: 'tag warn', style: 'margin-left:6px' }, '비어 있는 자리') : null);
+    }));
+
+    /* 평가 점수 빠른 입력 — 바꾸면 바로 저장 */
+    var quick = h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '모델'), axes.map(function (a) { return h('th', { scope: 'col' }, a.name); }))),
+      h('tbody', null, L.filterModels(models, {}).map(function (m) {
+        return h('tr', null, h('th', { scope: 'row' }, h('a', { href: '#/model/' + m.id }, L.brandShort(m.brand) + ' ' + m.model_name)),
+          axes.map(function (a) {
+            var s = selectEl(a.key, ['1', '2', '3', '4', '5'], m[a.key], '-');
+            s.setAttribute('aria-label', m.model_name + ' ' + a.name + ' 평가');
+            s.addEventListener('change', function () {
+              var x = modelById(m.id); if (!x) return;
+              x[a.key] = L.cleanScore(s.value); save(); render();
+            });
+            return h('td', null, s);
+          }));
+      }))));
+
+    /* 요약 코멘트 — 직접 쓰거나 AI 요약(반자동)을 붙여 넣습니다 */
+    var note = db.insightNote || { text: '', origin: '', saved_at: '' };
+    var noteTa = h('textarea', { name: 'note', rows: 6, placeholder: '예) 중형 굴착기는 슬림 필러·넓은 글라스가 공통 흐름입니다. CMF 는 전 브랜드가 평이해 차별화 여지가 있습니다.' }, note.text || '');
+    var originSel = selectEl('origin', ['디자이너 작성', 'AI 요약(검토 필요)'], note.origin || '디자이너 작성');
+    var noteCard = h('section', { class: 'card' }, h('h2', null, '요약 코멘트'),
+      h('p', { class: 'note' }, '리포트 6번 항목에 들어갑니다. AI 요약을 쓰려면 ① 프롬프트를 복사해 ChatGPT 등에 붙여 넣고 ② 받은 답을 아래 칸에 붙여 넣은 뒤 ③ 출처를 「AI 요약(검토 필요)」로 두고 저장해 주세요. 프롬프트에는 모델명·점수·태그만 들어가고 이미지·출처 URL 은 들어가지 않습니다.'),
+      h('div', { class: 'btn-row', style: 'margin-bottom:10px' },
+        h('button', { type: 'button', class: 'btn', onclick: function () { copyText(L.insightPrompt(ins, sc)); } }, 'AI 요약 프롬프트 복사')),
+      h('div', { class: 'form-grid' }, field('요약 코멘트', noteTa, { span: true }), field('작성 출처', originSel)),
+      h('div', { class: 'btn-row', style: 'margin-top:10px' },
+        h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          db.insightNote = { text: noteTa.value.trim(), origin: originSel.value, saved_at: L.stampTime(new Date()) };
+          save(); toast(db.insightNote.text ? '요약 코멘트를 저장했습니다.' : '요약 코멘트를 비웠습니다.'); render();
+        } }, '저장'),
+        note.saved_at ? h('span', { class: 'note' }, '마지막 저장 ' + note.saved_at + ' · ' + (note.origin || '')) : null));
+
+    return [
+      head,
+      h('section', { class: 'card' }, h('h2', null, '주요 인사이트'),
+        h('div', { class: 'tiles' }, [['모델', ins.count + '건'], ['브랜드', ins.brandCount + '개'], ['평가 입력', ins.scoredCount + '건'], ['Design Tag', ins.tags.length + '종']].map(function (t) {
+          return h('div', { class: 'tile' }, h('div', { class: 'k' }, t[0]), h('div', { class: 'v' }, t[1])); })),
+        h('ul', null, ins.headline.map(function (x) { return h('li', null, x); })),
+        h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/report' }, 'Benchmarking Report 로 보기'), h('a', { class: 'btn', href: '#/feedback/scores' }, '점수 비교에 피드백 남기기'))),
+      h('section', { class: 'card' }, h('h2', null, '브랜드별 요약'), summaryTbl),
+      h('section', { class: 'card' }, h('h2', null, '점수 비교'),
+        h('p', { class: 'note' }, '디자이너 평가(1~5)의 브랜드 평균입니다. 괄호는 축 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
+      h('section', { class: 'card' }, h('h2', null, '강·약점'), h('p', { class: 'note' }, '축 평균보다 0.5점 이상 높거나 낮은 축, 출력 대비 중량(kW/t)이 전체 평균과 10% 이상 다른 경우를 적습니다.'), swGrid),
+      h('div', { class: 'grid-2' },
+        h('section', { class: 'card' }, h('h2', null, 'Design Tag 트렌드'), tagTbl),
+        h('section', { class: 'card' }, h('h2', null, 'White Space'), h('p', { class: 'note' }, '전체 평균이 낮은 축부터 적습니다. 가장 높은 브랜드도 4점이 안 되면 「비어 있는 자리」로 표시합니다.'), wsList)),
+      noteCard,
+      h('section', { class: 'card' }, h('h2', null, '평가 점수 빠른 입력'), h('p', { class: 'note' }, '1~5점으로 골라 주세요. 바꾸면 바로 저장되고 위 표가 다시 계산됩니다. 점수는 관찰(OBSERVATION)이라 자료 등록 화면의 각 블록에도 같은 칸이 있습니다.'), quick)
+    ];
+  }
+
+  /* ── 08 Benchmarking Report ──────────── */
+  var rpStyleDone = false;
+  function viewReport() {
+    if (!rpStyleDone) { document.head.appendChild(h('style', { id: 'rpCss' }, L.REPORT_CSS)); rpStyleDone = true; }
+    var rep = L.buildReport(db, targetOpts());
+    var fname = 'Benchmarking_Report_' + (rep.scope ? rep.scope.scope_id + '_' : '') + stamp() + fileTag();
+    function exportXlsx() {
+      var wb = XLSX.utils.book_new();
+      L.reportSheets(rep).forEach(function (s) { XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.aoa), s.name); });
+      var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      download(fname + '.xlsx', new Blob([out], { type: 'application/octet-stream' }));
+    }
+    function exportHtml() { download(fname + '.html', new Blob([L.reportHtml(rep)], { type: 'text/html;charset=utf-8' })); }
+    var art = h('article', { class: 'rp card rp-screen' });
+    art.innerHTML = L.reportBodyHtml(rep);   // reportBodyHtml 은 모든 값을 이스케이프합니다
+    var sum = {};
+    L.feedbackSummary(db.feedback || []).forEach(function (r) { sum[r.target] = r; });
+    art.querySelectorAll('section[data-section]').forEach(function (sec) {
+      var id = sec.getAttribute('data-section'), s = sum[id];
+      sec.appendChild(h('div', { class: 'btn-row no-print rp-fb' },
+        h('a', { class: 'btn btn-sm', href: '#/feedback/' + id }, '이 항목에 피드백'),
+        s && s.count ? h('span', { class: 'note' }, '피드백 ' + s.count + '건 · 평균 ' + s.avg + '점' + (s.open ? ' · 열림 ' + s.open : '')) : null));
+    });
+    return [
+      h('div', { class: 'no-print' }, pageHead('STAGE 08', 'Benchmarking Report', '인사이트·비교·전문가 피드백·운영 상태를 한 장의 보고서로 묶습니다. 인쇄 창에서 「PDF로 저장」을 고르면 PDF 가 됩니다.',
+        h('div', { class: 'btn-row' },
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { window.print(); } }, '인쇄 · PDF 저장'),
+          h('button', { type: 'button', class: 'btn', onclick: exportXlsx }, 'Excel(xlsx)'),
+          h('button', { type: 'button', class: 'btn', onclick: exportHtml }, 'HTML 내려받기'))),
+        targetTools(),
+        h('p', { class: 'note' }, 'xlsx 에는 요약·브랜드요약·점수비교·강약점·태그트렌드·선택비교·전문가피드백·운영 시트가 들어갑니다. HTML 은 파일 하나로 열리고 메일로 보내도 모양이 그대로입니다. PPTX 자동 생성은 3단계입니다.')),
+      art
+    ];
+  }
+
+  /* ── 09 전문가(디자이너) 피드백 ──────── */
+  var fbState = { status: '', target: '' };
+  function viewFeedback(preset) {
+    var list = db.feedback || [];
+    var targetSel = h('select', { name: 'target' },
+      h('optgroup', { label: '리포트 항목' }, L.REPORT_SECTIONS.map(function (s) { return h('option', { value: s.id, selected: s.id === preset }, s.name); })),
+      h('optgroup', { label: '모델' }, L.filterModels(db.models, {}).map(function (m) { return h('option', { value: 'model:' + m.id, selected: 'model:' + m.id === preset }, L.brandShort(m.brand) + ' ' + m.model_name); })));
+    var typeSel = selectEl('type', L.FEEDBACK_TYPES, L.FEEDBACK_TYPES[1]);
+    var rating = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '평가' }, [1, 2, 3, 4, 5].map(function (n) {
+      return h('label', { class: 'opt' }, h('input', { type: 'radio', name: 'rating', value: String(n), checked: n === 3 }), h('span', { class: 't' }, n + '점'));
+    }));
+    var comment = h('textarea', { name: 'comment', rows: 4, placeholder: '예) 실제 디자인 관점에서는 「Chiseled」보다 「Technical / Functional」에 가깝습니다.' });
+    var author = h('input', { name: 'author', value: db.lastAuthor || '', placeholder: '예) 디자인팀 홍길동', autocomplete: 'name' });
+    var form = h('form', { novalidate: true, onsubmit: function (e) {
+      e.preventDefault();
+      var r = form.querySelector('input[name=rating]:checked');
+      var res = L.addFeedback(list, { target: targetSel.value, type: typeSel.value, rating: r ? Number(r.value) : 0, comment: comment.value, author: author.value },
+        new Date(), scopeNow() ? scopeNow().scope_id : '');
+      if (!res.ok) {
+        var names = { target: '대상', type: '분류', rating: '평가', author: '작성자', comment: '코멘트(「동의」가 아니면 필수)' };
+        toast('확인해 주세요: ' + res.errors.map(function (k) { return names[k]; }).join(', '), true);
+        return;
+      }
+      db.feedback = res.list; db.lastAuthor = author.value.trim();
+      save(); toast(res.item.id + ' 피드백을 기록했습니다.'); go('#/feedback');
+    } },
+      h('div', { class: 'form-grid' },
+        field('대상', targetSel, { req: true }), field('분류', typeSel, { req: true }),
+        field('평가 (1 매우 부족 ~ 5 매우 좋음)', rating, { req: true, span: true }),
+        field('코멘트', comment, { span: true, hint: '「동의(수정 없음)」이 아니면 무엇을 어떻게 고칠지 적어 주세요.' }),
+        field('작성자', author, { req: true, hint: '이 브라우저에 기억해 둡니다.' })),
+      h('div', { class: 'btn-row', style: 'margin-top:12px' }, h('button', { type: 'submit', class: 'btn btn-primary' }, '피드백 기록')));
+
+    var summary = L.feedbackSummary(list).filter(function (r) { return r.count; });
+    var shown = list.filter(function (x) { return (!fbState.status || x.status === fbState.status) && (!fbState.target || x.target === fbState.target); }).slice().reverse();
+    var fStatus = selectEl('fs', L.FEEDBACK_STATUS, fbState.status, '상태 전체');
+    fStatus.addEventListener('change', function () { fbState.status = fStatus.value; render(); });
+    var targets = list.map(function (x) { return x.target; }).filter(function (t, i, a) { return a.indexOf(t) === i; });
+    var fTarget = selectEl('ft', targets.map(function (t) { return { value: t, label: L.feedbackTargetLabel(t, db.models) }; }), fbState.target, '대상 전체');
+    fTarget.addEventListener('change', function () { fbState.target = fTarget.value; render(); });
+
+    return [
+      pageHead('STAGE 09', '전문가 피드백', '분석·리포트 항목과 모델별로 디자이너가 평가(1~5)와 코멘트를 남깁니다. 기록은 고치지 않고 쌓으며, 반영하면 상태만 「반영됨」으로 바꿉니다(작성자·시각 보존).'),
+      h('section', { class: 'card' }, h('h2', null, '피드백 남기기'), form),
+      summary.length ? h('section', { class: 'card' }, h('h2', null, '항목별 요약'), h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+        h('thead', null, h('tr', null, ['대상', '건수', '평균 평가', '열림', '분류', '최근 작성'].map(function (t, i) { return h('th', { scope: 'col', class: i && i < 4 ? 'num' : null }, t); }))),
+        h('tbody', null, summary.map(function (r) {
+          return h('tr', null, h('th', { scope: 'row' }, L.feedbackTargetLabel(r.target, db.models)), h('td', { class: 'num' }, String(r.count)), h('td', { class: 'num' }, String(r.avg)),
+            h('td', { class: 'num' + (r.open ? '' : ' zero') }, String(r.open)), h('td', null, r.types.map(function (x) { return x.type + ' ' + x.count; }).join(', ')), h('td', null, r.latest));
+        }))))) : null,
+      h('section', { class: 'card' },
+        h('div', { class: 'page-head', style: 'margin-bottom:10px' }, h('h2', { class: 'titles', style: 'margin:0' }, '기록 ' + shown.length + '건'), h('div', { class: 'btn-row' }, fStatus, fTarget)),
+        shown.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+          h('thead', null, h('tr', null, ['ID', '대상', '분류', '평가', '코멘트', '작성자', '작성 시각', '상태', ''].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+          h('tbody', null, shown.map(function (x) {
+            var done = x.status === '반영됨';
+            return h('tr', null, h('td', null, x.id), h('td', null, x.target.indexOf('model:') === 0 ? h('a', { href: '#/model/' + x.target.slice(6) }, L.feedbackTargetLabel(x.target, db.models)) : L.feedbackTargetLabel(x.target, db.models)),
+              h('td', null, x.type), h('td', { class: 'num' }, x.rating + ' / 5'), h('td', { class: 'pre' }, x.comment || '-'), h('td', null, x.author), h('td', null, x.created_at),
+              h('td', null, h('span', { class: 'tag ' + (done ? 'ok' : 'warn') }, x.status), done && x.resolved_at ? h('div', { class: 'note' }, x.resolved_at) : null),
+              h('td', null, h('button', { type: 'button', class: 'btn btn-sm', onclick: function () {
+                db.feedback = L.setFeedbackStatus(db.feedback, x.id, done ? '열림' : '반영됨', new Date()); save(); render();
+              } }, done ? '다시 열기' : '반영됨으로'))); })))) : h('p', { class: 'note' }, '조건에 맞는 기록이 없습니다.'))
+    ];
+  }
+
+  /* ── 10 정기 업데이트 · 운영 루프 ────── */
+  function opsNow() {
+    return L.opsStatus(db.ops, db.models, new Date(), { openFeedback: (db.feedback || []).filter(function (x) { return x.status !== '반영됨'; }).length });
+  }
+  function viewOps() {
+    var st = opsNow();
+    var ops = db.ops;
+    var cyc = selectEl('cycle', L.UPDATE_CYCLES.map(function (c) { return { value: c.id, label: c.name }; }), ops.cycle);
+    var staleIn = h('input', { name: 'stale', type: 'number', min: 7, max: 3650, value: String(ops.stale_days), inputmode: 'numeric' });
+    var lastIn = h('input', { name: 'last', type: 'date', value: ops.last_update || '' });
+    function saveSettings() {
+      var o = L.restoreOps({ cycle: cyc.value, stale_days: staleIn.value, last_update: lastIn.value, steps: ops.steps, history: ops.history });
+      if (String(o.stale_days) !== String(Number(staleIn.value))) toast('오래된 자료 기준은 7~3650일입니다. ' + o.stale_days + '일로 두었습니다.', true);
+      db.ops = o; save(); toast('운영 설정을 저장했습니다.'); render();
+    }
+    var stateText = { none: '갱신 기록이 없습니다', ok: st.daysLeft + '일 남음', soon: st.daysLeft + '일 남음', due: '오늘 예정', overdue: (-st.daysLeft) + '일 지남' }[st.state];
+    var alert = st.state === 'overdue' ? h('p', { class: 'alert warn' }, '다음 업데이트 예정일(' + st.next + ')이 ' + (-st.daysLeft) + '일 지났습니다. 아래 단계를 진행하고 「이번 사이클 완료」를 눌러 주세요.')
+      : st.state === 'due' || st.state === 'soon' ? h('p', { class: 'alert info' }, '다음 업데이트 예정일은 ' + st.next + ' 입니다(' + stateText + ').')
+      : st.state === 'none' ? h('p', { class: 'alert info' }, '아직 사이클을 완료한 적이 없습니다. 첫 수집을 마쳤다면 「이번 사이클 완료」를 누르거나 마지막 갱신일을 직접 적어 주세요.') : null;
+    var hint = { qa: st.hints.qa ? '필수 메타 누락 ' + st.hints.qa + '건 남음' : '누락 없음', analyze: st.hints.analyze ? '평가 점수 없는 모델 ' + st.hints.analyze + '건' : '모두 평가됨',
+      feedback: st.hints.feedback ? '열린 피드백 ' + st.hints.feedback + '건' : '열린 피드백 없음', collect: st.stale.length ? '오래된 자료 ' + st.stale.length + '건 재확인' : '' };
+    var steps = h('ol', { class: 'loop' }, L.OPS_STEPS.map(function (s) {
+      var on = !!ops.steps[s.id];
+      return h('li', { class: on ? 'done' : null },
+        h('label', { class: 'opt' }, h('input', { type: 'checkbox', checked: on, onchange: function (e) { db.ops = L.toggleStep(db.ops, s.id, e.target.checked, new Date()); save(); render(); } }),
+          h('span', { class: 't' }, s.name), h('span', { class: 's' }, (on ? '체크 ' + ops.steps[s.id] + ' · ' : '') + (hint[s.id] || ''))),
+        h('a', { class: 'btn btn-sm', href: s.href }, s.menu));
+    }));
+    var noteIn = h('input', { name: 'note', placeholder: '예) 신규 2건 등록, CMF Taxonomy 에 Matte 추가' });
+    return [
+      pageHead('STAGE 10', '정기 업데이트 · 운영 루프', '업데이트 주기를 정하고, 한 바퀴(수집 → 점검 → 평가 → 인사이트 → 리포트 → 피드백 → 보정)를 체크하며 돌립니다. 자동 재수집은 3단계이고, 지금은 예정일·오래된 자료를 알려 주는 방식입니다.'),
+      alert,
+      h('div', { class: 'tiles' }, [['업데이트 주기', st.cycle.name], ['마지막 갱신일', st.last || '-'], ['다음 예정일', st.next || '-'], ['예정일까지', stateText],
+        ['오래된 자료(' + st.staleDays + '일+)', st.stale.length + '건'], ['수집일 없음', st.undated.length + '건']].map(function (t) {
+        return h('div', { class: 'tile' }, h('div', { class: 'k' }, t[0]), h('div', { class: 'v' }, t[1])); })),
+      h('div', { class: 'grid-2' },
+        h('section', { class: 'card' }, h('h2', null, '이번 사이클 (' + st.stepsDone + ' / ' + st.stepsTotal + ')'), steps,
+          h('div', { class: 'form-grid', style: 'margin-top:12px' }, field('완료 메모 (보정 내용 등)', noteIn, { span: true })),
+          h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+            var doIt = function () { db.ops = L.completeCycle(db.ops, new Date(), noteIn.value, db.models.length); save(); toast('사이클을 완료했습니다. 다음 예정일은 ' + L.nextDue(db.ops.last_update, db.ops.cycle) + ' 입니다.'); render(); };
+            if (st.stepsDone < st.stepsTotal) confirmBox('사이클 완료', '체크하지 않은 단계가 ' + (st.stepsTotal - st.stepsDone) + '개 있습니다. 그래도 오늘을 마지막 갱신일로 기록할까요?', '완료 기록', doIt);
+            else doIt();
+          } }, '이번 사이클 완료'))),
+        h('section', { class: 'card' }, h('h2', null, '설정'),
+          h('div', { class: 'form-grid' }, field('업데이트 주기', cyc), field('오래된 자료 기준(일)', staleIn, { hint: '수집일이 이보다 오래되면 경고합니다.' }),
+            field('마지막 갱신일', lastIn, { hint: '보통은 「이번 사이클 완료」가 채웁니다.' })),
+          h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn', onclick: saveSettings }, '설정 저장')))),
+      h('section', { class: 'card' }, h('h2', null, '오래된 자료 · 수집일 없음'),
+        st.stale.length || st.undated.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+          h('thead', null, h('tr', null, ['모델', '수집일', '경과', ''].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+          h('tbody', null, st.stale.map(function (s) {
+            return h('tr', null, h('th', { scope: 'row' }, h('a', { href: '#/model/' + s.id }, L.brandShort(s.brand) + ' ' + s.model_name)), h('td', null, s.collected_at), h('td', { class: 'num' }, s.age + '일'),
+              h('td', null, h('a', { class: 'btn btn-sm', href: '#/edit/' + s.id }, '다시 확인·수정')));
+          }).concat(st.undated.map(function (s) {
+            return h('tr', null, h('th', { scope: 'row' }, h('a', { href: '#/model/' + s.id }, L.brandShort(s.brand) + ' ' + s.model_name)), h('td', null, '없음'), h('td', null, '-'),
+              h('td', null, h('a', { class: 'btn btn-sm', href: '#/edit/' + s.id }, '수집일 넣기')));
+          }))))) : h('p', { class: 'note' }, '기준보다 오래된 자료가 없습니다.')),
+      h('section', { class: 'card' }, h('h2', null, '업데이트 이력'),
+        ops.history.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+          h('thead', null, h('tr', null, ['완료일', '주기', '체크한 단계', '모델 수', '메모'].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+          h('tbody', null, ops.history.map(function (x) {
+            return h('tr', null, h('td', null, x.date), h('td', null, (L.UPDATE_CYCLES.filter(function (c) { return c.id === x.cycle; })[0] || { name: '-' }).name),
+              h('td', null, x.steps_done.length + ' / ' + L.OPS_STEPS.length), h('td', { class: 'num' }, String(x.models || '-')), h('td', null, x.note || '-'));
+          })))) : h('p', { class: 'note' }, '아직 완료한 사이클이 없습니다.'))
+    ];
+  }
+
   /* ── 라우터 ─────────────────────────── */
   function render() {
     var route = location.hash || (db.scopes.length ? '#/dashboard' : '#/scope');
@@ -923,6 +1231,10 @@
       case 'edit': view = viewEdit(parts[1] ? decodeURIComponent(parts[1]) : ''); break;
       case 'model': view = viewDetail(decodeURIComponent(parts[1] || '')); break;
       case 'data': view = viewData(); break;
+      case 'insight': view = viewInsight(); break;
+      case 'report': view = viewReport(); break;
+      case 'feedback': view = viewFeedback(parts[1] ? decodeURIComponent(parts[1]) : ''); break;
+      case 'ops': view = viewOps(); break;
       default: route = '#/scope'; view = viewScope();
     }
     renderChrome(route);

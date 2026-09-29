@@ -16,9 +16,12 @@
 --    benchmark_scope  Benchmark Scope (장비군 × 톤급 × 경쟁사 × 목적)
 --    benchmark_model  모델 1건 = 6절 Schema 10개 블록의 필드
 --    model_media      모델 이미지(View 별) — 모델마다 여러 장
+--    design_feedback  전문가(디자이너) 피드백 — 리포트 항목·모델별 평가·코멘트 (기록성, 2026-09-29)
+--    ops_history      정기 업데이트 사이클 완료 이력 (기록성, 2026-09-29)
 --
 --  권한 원칙 : 모든 행은 만든 사람(owner_id = auth.uid())만 보고 고칩니다.
---              이 도구에는 기록성(이력·로그) 데이터가 없습니다.
+--              기록성 표(design_feedback·ops_history)는 고치거나 지울 수 없습니다.
+--              피드백은 상태(status·resolved_at) 칸만 바꿀 수 있습니다(칸 단위 GRANT).
 --  이 스키마는 수강생 본인 프로젝트 전제라 테이블 이름에 접두사를 붙이지 않았습니다.
 -- ============================================================================
 
@@ -56,10 +59,7 @@ create table if not exists public.benchmark_scope (
   constraint benchmark_scope_tonnage check (
     (equipment_type = 'Excavator'    and tonnage_class in ('MIC', 'MNI', 'MID', 'MED', 'LRG', 'MNG')) or
     (equipment_type = 'Wheel Loader' and tonnage_class in ('CMP', 'SML', 'MED', 'LRG', 'MNG'))),
-  -- 부록 B 경쟁사 Universe 13개사
-  constraint benchmark_scope_brands check (brands <@ array[
-    'Caterpillar (CAT)', 'Komatsu', 'XCMG', 'John Deere', 'Liebherr', 'Sany', 'Volvo CE',
-    'Hitachi Construction Machinery', 'JCB', 'Bobcat', 'Kubota', 'Yanmar', 'Kobelco']::text[]),
+  -- 경쟁사 Universe 제약(benchmark_scope_brands)은 아래 1-b 에서 붙인다 — 목록이 바뀌면 지우고 다시 만들기 위해
   -- 제출 기획서 3절 Benchmark Purpose 7종
   constraint benchmark_scope_purposes check (purposes <@ array[
     'Exterior', 'Cabin', 'CMF', 'Trend', 'Serviceability', 'Safety', 'Full Benchmark']::text[]),
@@ -177,6 +177,71 @@ create table if not exists public.model_media (
 create index if not exists model_media_model_idx on public.model_media (model_ref);
 
 -- ----------------------------------------------------------------------------
+-- 1-b. 2026-09-29 변경분 — 이미 표를 만든 프로젝트에도 그대로 다시 실행하면 적용된다
+-- ----------------------------------------------------------------------------
+
+-- 경쟁사 Universe: 부록 B 13개사 + Mecalac(수강생 요청) = 14개사
+alter table public.benchmark_scope drop constraint if exists benchmark_scope_brands;
+alter table public.benchmark_scope add constraint benchmark_scope_brands check (brands <@ array[
+  'Caterpillar (CAT)', 'Komatsu', 'XCMG', 'John Deere', 'Liebherr', 'Sany', 'Volvo CE',
+  'Hitachi Construction Machinery', 'JCB', 'Bobcat', 'Kubota', 'Yanmar', 'Kobelco', 'Mecalac']::text[]);
+
+-- 디자이너 평가 점수 4축(1~5, 관찰 OBSERVATION)
+alter table public.benchmark_model add column if not exists score_exterior int check (score_exterior between 1 and 5);
+alter table public.benchmark_model add column if not exists score_cabin    int check (score_cabin between 1 and 5);
+alter table public.benchmark_model add column if not exists score_cmf      int check (score_cmf between 1 and 5);
+alter table public.benchmark_model add column if not exists score_service  int check (score_service between 1 and 5);
+
+-- 운영 루프 설정 · 인사이트 요약 코멘트 (localStorage 의 ops · insightNote · lastAuthor)
+alter table public.workspace add column if not exists update_cycle text not null default 'monthly'
+  check (update_cycle in ('weekly', 'biweekly', 'monthly', 'quarterly'));
+alter table public.workspace add column if not exists stale_days int not null default 180 check (stale_days between 7 and 3650);
+alter table public.workspace add column if not exists last_update date;
+alter table public.workspace add column if not exists ops_steps jsonb not null default '{}'::jsonb;  -- {단계id: 체크한 날}
+alter table public.workspace add column if not exists insight_note text not null default '';
+alter table public.workspace add column if not exists insight_note_origin text not null default ''
+  check (insight_note_origin in ('', '디자이너 작성', 'AI 요약(검토 필요)'));
+alter table public.workspace add column if not exists insight_note_saved_at text not null default '';
+alter table public.workspace add column if not exists last_author text not null default '';
+
+-- 전문가(디자이너) 피드백 — 쌓기만 한다. 내용은 못 고치고 상태만 바꾼다
+create table if not exists public.design_feedback (
+  id            bigint generated always as identity primary key,
+  owner_id      uuid not null default auth.uid(),
+  feedback_id   text not null check (feedback_id ~ '^FB[0-9]{4,}$'),               -- 'FB0001'
+  target        text not null check (target ~ '^model:M[0-9]{4,}$' or target in
+                ('overview', 'brands', 'scores', 'sw', 'trend', 'note', 'compare', 'feedback', 'ops')),
+  type          text not null check (type in ('동의(수정 없음)', '분석 결과 수정 필요', '디자인 Tag 보정',
+                                              'Taxonomy·기준 조정', '예외 사례 등록', '추가 분석 요청')),
+  rating        int  not null check (rating between 1 and 5),
+  comment       text not null default '',
+  author        text not null check (length(trim(author)) > 0),
+  scope_id      text not null default '',
+  written_at    timestamptz not null default now(),
+  status        text not null default '열림' check (status in ('열림', '반영됨')),
+  resolved_at   timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  -- 「동의」가 아니면 무엇을 고칠지 적어야 한다 (도구의 validateFeedback 과 같다)
+  constraint design_feedback_comment check (type = '동의(수정 없음)' or length(trim(comment)) > 0),
+  -- upsert onConflict = 'owner_id,feedback_id'
+  constraint design_feedback_uniq unique (owner_id, feedback_id)
+);
+
+-- 정기 업데이트 사이클 완료 이력 — 쌓기만 한다
+create table if not exists public.ops_history (
+  id            bigint generated always as identity primary key,
+  owner_id      uuid not null default auth.uid(),
+  done_on       date not null,
+  cycle         text not null default '' check (cycle in ('', 'weekly', 'biweekly', 'monthly', 'quarterly')),
+  steps_done    text[] not null default '{}',
+  note          text not null default '',
+  models        int  not null default 0 check (models >= 0),
+  created_at    timestamptz not null default now()
+);
+create index if not exists ops_history_owner_idx on public.ops_history (owner_id, done_on desc);
+
+-- ----------------------------------------------------------------------------
 -- 2. 함수 · 트리거
 --
 --  search_path 를 고정한다. 고정하지 않으면 호출자의 search_path 에 따라
@@ -194,7 +259,7 @@ $fn$;
 do $trg$
 declare t text;
 begin
-  foreach t in array array['workspace', 'benchmark_scope', 'benchmark_model', 'model_media']
+  foreach t in array array['workspace', 'benchmark_scope', 'benchmark_model', 'model_media', 'design_feedback']
   loop
     execute format('drop trigger if exists %I on public.%I', t || '_updated_at', t);
     execute format('create trigger %I before update on public.%I for each row execute function public.set_updated_at()',
@@ -211,6 +276,8 @@ alter table public.workspace       enable row level security;
 alter table public.benchmark_scope enable row level security;
 alter table public.benchmark_model enable row level security;
 alter table public.model_media     enable row level security;
+alter table public.design_feedback enable row level security;
+alter table public.ops_history     enable row level security;
 
 do $rls$
 declare t text;
@@ -251,6 +318,19 @@ create policy model_media_update on public.model_media for update to authenticat
 create policy model_media_delete on public.model_media for delete to authenticated
   using (owner_id = auth.uid());
 
+-- 기록성 표 — 지우기 정책 없음. 피드백 수정은 아래 칸 단위 GRANT 로 status·resolved_at 만
+drop policy if exists design_feedback_select on public.design_feedback;
+drop policy if exists design_feedback_insert on public.design_feedback;
+drop policy if exists design_feedback_update on public.design_feedback;
+create policy design_feedback_select on public.design_feedback for select to authenticated using (owner_id = auth.uid());
+create policy design_feedback_insert on public.design_feedback for insert to authenticated with check (owner_id = auth.uid());
+create policy design_feedback_update on public.design_feedback for update to authenticated
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+drop policy if exists ops_history_select on public.ops_history;
+drop policy if exists ops_history_insert on public.ops_history;
+create policy ops_history_select on public.ops_history for select to authenticated using (owner_id = auth.uid());
+create policy ops_history_insert on public.ops_history for insert to authenticated with check (owner_id = auth.uid());
+
 -- ----------------------------------------------------------------------------
 -- 4. 표 권한 — Supabase 는 새 표마다 anon 에도 전 권한을 자동으로 붙인다.
 --    정책이 anon 을 막지만, 권한 자체도 끊어 두 겹으로 막는다.
@@ -261,6 +341,11 @@ revoke all on public.workspace, public.benchmark_scope, public.benchmark_model, 
 grant select, insert, update, delete
   on public.workspace, public.benchmark_scope, public.benchmark_model, public.model_media
   to authenticated;
+
+-- 기록성 표: 표 전체 권한을 먼저 끊고(재실행 때 예전 권한이 남지 않게) 필요한 것만 준다
+revoke all on public.design_feedback, public.ops_history from anon, authenticated;
+grant select, insert on public.design_feedback, public.ops_history to authenticated;
+grant update (status, resolved_at) on public.design_feedback to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 5. 함수 실행 권한

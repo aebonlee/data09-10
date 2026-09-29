@@ -259,6 +259,26 @@ dl.kvs dd { margin: 0; min-width: 0; }
 .toast.error { background: var(--danger); }
 
 /* 인쇄: 비교표만 */
+/* ── 2026-09-29 추가: 07 Insight · 08 Report · 09 피드백 · 10 운영 루프 ── */
+table.list td.up { background: #e3f4e8; }
+table.list td.down { background: #fde8e6; }
+table.list tr.sum th, table.list tr.sum td { background: #eef2f7; font-weight: 700; }
+table.list td.pre { white-space: pre-line; min-width: 200px; }
+.sw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.sw-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
+.sw-card h3 { margin: 0 0 6px; }
+.sw-card ul { margin: 2px 0 8px; padding-left: 20px; }
+.sw-k { font-weight: 800; font-size: .88rem; }
+.sw-k.ok { color: var(--ok); }
+.sw-k.bad { color: var(--danger); }
+ol.loop { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ol.loop li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; }
+ol.loop li.done { background: #eef8f1; border-color: #b9dfc5; }
+ol.loop li .opt { border: 0; padding: 0; min-height: 44px; flex: 1 1 220px; }
+.nav a .s.badge-warn { color: #ffd98a; font-weight: 700; }
+.rp-screen { padding: 24px; }
+.rp-screen .rp-fb { margin-top: 8px; }
+
 @media print {
   .side, .topbar, .site-footer, .sample-banner, .no-print, .toast { display: none !important; }
   .shell { display: block; }

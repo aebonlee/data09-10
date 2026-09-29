@@ -8,9 +8,10 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var SCHEMA_VERSION = 'v0.1-stage1';
+  var SCHEMA_VERSION = 'v0.2-stage1';  // v0.2: 평가 점수 4축 추가(2026-09-29)
 
-  /* ── 부록 B. 경쟁사 Selection Universe (13개사, 제출 순서 그대로) ── */
+  /* ── 부록 B. 경쟁사 Selection Universe (제출 13개사 + 2026-09-29 수강생 요청 Mecalac = 14개사)
+     개수는 어디서도 숫자로 적지 않고 BRANDS.length 로 셉니다. ── */
   var BRANDS = [
     { id: 'cat', name: 'Caterpillar (CAT)', short: 'CAT', hq: '미국', aliases: ['cat', 'caterpillar', 'caterpillar (cat)'] },
     { id: 'komatsu', name: 'Komatsu', short: 'Komatsu', hq: '일본', aliases: ['komatsu', '코마츠'] },
@@ -24,7 +25,8 @@
     { id: 'bobcat', name: 'Bobcat', short: 'Bobcat', hq: '미국 (모기업: 한국 두산밥캣)', aliases: ['bobcat', '밥캣'] },
     { id: 'kubota', name: 'Kubota', short: 'Kubota', hq: '일본', aliases: ['kubota', '구보다'] },
     { id: 'yanmar', name: 'Yanmar', short: 'Yanmar', hq: '일본', aliases: ['yanmar', '얀마'] },
-    { id: 'kobelco', name: 'Kobelco', short: 'Kobelco', hq: '일본', aliases: ['kobelco', '코벨코'] }
+    { id: 'kobelco', name: 'Kobelco', short: 'Kobelco', hq: '일본', aliases: ['kobelco', '코벨코'] },
+    { id: 'mecalac', name: 'Mecalac', short: 'Mecalac', hq: '프랑스', aliases: ['mecalac', '메카락', '메칼락'] }
   ];
 
   /* ── 부록 C. Product / Tonnage Taxonomy ──
@@ -117,6 +119,7 @@
     F('surface_edge', 'Surface / Edge', 'design', 'text', { syn: ['surface_edge', '면처리', '엣지'] }),
     F('proportion', 'Proportion', 'design', 'text', { syn: ['proportion', '비례'] }),
     F('design_tags', 'Design Tags', 'design', 'tags', { syn: ['design_tags', 'tags', '태그', '디자인태그'] }),
+    F('score_exterior', 'Exterior 평가(1~5)', 'design', 'score', { syn: ['score_exterior', 'exterior평가', '외관평가', '외관점수'] }),
 
     F('glass_area', 'Glass Area', 'cabin', 'text', { syn: ['glass_area', '유리면적', '글라스'] }),
     F('pillar_design', 'Pillar Design', 'cabin', 'text', { syn: ['pillar_design', '필러'] }),
@@ -126,6 +129,7 @@
     F('seat', 'Seat', 'cabin', 'text', { syn: ['seat', '시트'] }),
     F('display', 'Display', 'cabin', 'text', { syn: ['display', '디스플레이', '모니터'] }),
     F('hvac', 'HVAC', 'cabin', 'text', { syn: ['hvac', '공조'] }),
+    F('score_cabin', 'Cabin/HMI 평가(1~5)', 'cabin', 'score', { syn: ['score_cabin', 'cabin평가', '캐빈평가', '캐빈점수'] }),
 
     F('main_color', 'Main Color', 'cmf', 'text', { syn: ['main_color', '메인컬러', '주색상', '주조색'] }),
     F('accent_color', 'Accent Color', 'cmf', 'text', { syn: ['accent_color', '포인트컬러', '보조색', '강조색'] }),
@@ -134,6 +138,7 @@
     F('finish', 'Finish', 'cmf', 'text', { syn: ['finish', '마감'] }),
     F('gloss', 'Gloss', 'cmf', 'text', { syn: ['gloss', '광택'] }),
     F('texture', 'Texture', 'cmf', 'text', { syn: ['texture', '질감', '텍스처'] }),
+    F('score_cmf', 'CMF 평가(1~5)', 'cmf', 'score', { syn: ['score_cmf', 'cmf평가', 'cmf점수'] }),
 
     F('operating_weight', '운전중량', 'engineering', 'number', { unit: 'kg', qty: 'weight', syn: ['operating_weight', '운전중량', '중량', '장비중량', 'weight'] }),
     F('engine_power', '엔진 출력', 'engineering', 'number', { unit: 'kW', qty: 'power', syn: ['engine_power', '엔진출력', '출력', '정격출력', 'power'] }),
@@ -147,6 +152,7 @@
     F('sensor_camera', 'Sensor / Camera', 'service', 'text', { syn: ['sensor_camera', '센서', '카메라'] }),
     F('safety_label', 'Safety Label', 'service', 'text', { syn: ['safety_label', '안전라벨', '안전표시'] }),
     F('access', 'Access (Step·Handrail)', 'service', 'text', { syn: ['access', '승하차', '스텝'] }),
+    F('score_service', 'Service/Safety 평가(1~5)', 'service', 'score', { syn: ['score_service', 'service평가', '정비평가', '정비점수'] }),
 
     F('obs_origin', '관찰 입력 출처', 'evidence', 'select', { options: OBS_ORIGIN, syn: ['obs_origin', '관찰출처'] }),
     F('confidence', 'Confidence (0~1)', 'evidence', 'number', { syn: ['confidence', '신뢰점수'] }),
@@ -174,6 +180,14 @@
     { key: 'collected_at', label: '수집일' },
     { key: 'source_url', label: 'Source URL' },
     { key: 'media', label: '이미지(경로 또는 파일)' }
+  ];
+
+  /* 평가 점수 4축 — 아래 「2026-09-29 추가」 참고 */
+  var SCORE_AXES = [
+    { key: 'score_exterior', axis: 'Exterior', name: 'Exterior 조형' },
+    { key: 'score_cabin', axis: 'Cabin', name: 'Cabin / HMI' },
+    { key: 'score_cmf', axis: 'CMF', name: 'CMF' },
+    { key: 'score_service', axis: 'Service', name: 'Service / Safety' }
   ];
 
   function fieldByKey(k) { return FIELDS.filter(function (f) { return f.key === k; })[0] || null; }
@@ -384,6 +398,7 @@
       m[k] = n == null ? '' : n;
     });
     if (m.confidence !== '' && (m.confidence < 0 || m.confidence > 1)) m.confidence = '';
+    SCORE_AXES.forEach(function (a) { m[a.key] = cleanScore(m[a.key]); });
     if (m.tonnage_class && p) m.tonnage_class = tonnageFromText(p.name, m.tonnage_class) || m.tonnage_class;
     if (!m.tonnage_class && p && m.operating_weight !== '') m.tonnage_class = suggestTonnage(p.name, m.operating_weight);
     m.collected_at = toDateStr(m.collected_at) || str(m.collected_at);
@@ -486,6 +501,7 @@
     if (v === '' || v == null) return '';
     if (f.key === 'tonnage_class') { var c = tonnageClass(m.equipment_type, v); return c ? c.name : String(v); }
     if (f.unit) return formatNum(v) + ' ' + f.unit;
+    if (f.type === 'score') return v + ' / 5';
     return String(v);
   }
   function formatNum(n) {
@@ -679,7 +695,8 @@
 
   /* ── DB (브라우저 저장소 한 덩어리) ── */
   function emptyDb() {
-    return { models: [], scopes: [], activeScope: '', compare: [], settings: { imageMaxPx: 800, imageQuality: 0.8 } };
+    return { models: [], scopes: [], activeScope: '', compare: [], settings: { imageMaxPx: 800, imageQuality: 0.8 },
+      feedback: [], ops: defaultOps(), insightNote: { text: '', origin: '', saved_at: '' }, lastAuthor: '' };
   }
   function restoreDb(p) {
     var db = emptyDb();
@@ -694,6 +711,10 @@
       if (px >= 200 && px <= 4000) db.settings.imageMaxPx = px;
       if (qu > 0.1 && qu <= 1) db.settings.imageQuality = qu;
     }
+    db.feedback = restoreFeedback(p.feedback);
+    db.ops = restoreOps(p.ops);
+    if (p.insightNote && typeof p.insightNote === 'object') db.insightNote = { text: str(p.insightNote.text), origin: str(p.insightNote.origin), saved_at: str(p.insightNote.saved_at) };
+    if (typeof p.lastAuthor === 'string') db.lastAuthor = p.lastAuthor;
     if (p._sample) db._sample = true;
     return db;
   }
@@ -706,6 +727,545 @@
       out[b.name] = models.filter(function (m) { return m.brand === b.name && (!p || m.equipment_type === p.name) && (!tonnage || m.tonnage_class === tonnage); }).length;
     });
     return out;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     2026-09-29 추가 — 수강생 Proto Web 의 End-to-End 흐름 중
+     08 Insight · 10 Report & Decision · 11 Designer Validation · 13 Scheduled Update 를
+     이 도구의 메뉴(07 Insight · 08 Report · 09 전문가 피드백 · 10 운영 루프)로 옮겼습니다.
+     여기 있는 함수는 화면과 무관한 계산만 합니다. 기준: 기획서 v0.2 「2026-09-29 수강생 추가 요청」 절
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* ── 평가 점수 4축 (디자이너 평가 1~5, OBSERVATION) ──
+     제출 기획서 5절 4대 분석축(Exterior·Cabin·CMF·Engineering) 중 Engineering 은 제원(FACT)으로 비교하므로
+     점수 축에서 빼고, 보조축 Serviceability/Safety 를 넣었습니다(가정 — 기획서 11장 「정한 것과 남은 확인 사항」 1번). */
+  function cleanScore(v) {
+    if (v === '' || v == null) return '';
+    var n = Number(String(v).replace(/[^\d.\-]/g, ''));
+    if (!isFinite(n) || n < 1 || n > 5) return '';
+    return Math.round(n);
+  }
+  function scoreOf(m, key) {
+    var v = m[key];
+    return typeof v === 'number' && v >= 1 && v <= 5 ? v : null;
+  }
+  function round1(n) { return n == null ? null : Math.round(n * 10) / 10; }
+  function round2(n) { return n == null ? null : Math.round(n * 100) / 100; }
+  function mean(list) {
+    var xs = list.filter(function (x) { return typeof x === 'number' && isFinite(x); });
+    return xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length : null;
+  }
+  function brandOrder(names) {
+    var order = BRANDS.map(function (b) { return b.name; });
+    return names.slice().sort(function (a, b) {
+      var ia = order.indexOf(a), ib = order.indexOf(b);
+      if (ia < 0) ia = 999; if (ib < 0) ib = 999;
+      return ia === ib ? String(a).localeCompare(String(b)) : ia - ib;
+    });
+  }
+  /* 출력 대비 중량 kW/t — 둘 다 있을 때만 */
+  function powerPerTon(m) {
+    var w = Number(m.operating_weight), p = Number(m.engine_power);
+    if (m.operating_weight === '' || m.engine_power === '' || !(w > 0) || !(p > 0)) return null;
+    return p / (w / 1000);
+  }
+  function tagCounts(models) {
+    var map = {};
+    models.forEach(function (m) {
+      (m.design_tags || []).forEach(function (t) { var k = str(t); if (k) map[k] = (map[k] || 0) + 1; });
+    });
+    return Object.keys(map).map(function (k) { return { tag: k, count: map[k] }; })
+      .sort(function (a, b) { return b.count - a.count || a.tag.localeCompare(b.tag); });
+  }
+
+  /* 브랜드별 요약 — 모델 수·평가 평균·제원 범위·자주 쓰인 태그·최근 수집일 */
+  function brandSummary(models) {
+    var names = models.map(function (m) { return m.brand; }).filter(function (b, i, a) { return b && a.indexOf(b) === i; });
+    return brandOrder(names).map(function (b) {
+      var mine = models.filter(function (m) { return m.brand === b; });
+      var scores = {};
+      SCORE_AXES.forEach(function (a) { scores[a.key] = round2(mean(mine.map(function (m) { return scoreOf(m, a.key); }))); });
+      var axisVals = SCORE_AXES.map(function (a) { return scores[a.key]; }).filter(function (x) { return x != null; });
+      var weights = mine.map(function (m) { return m.operating_weight === '' ? null : Number(m.operating_weight) / 1000; }).filter(function (x) { return x != null && isFinite(x); });
+      var years = mine.map(function (m) { return Number(m.release_year); }).filter(function (x) { return x > 1900; });
+      return {
+        brand: b, short: brandShort(b), models: mine.length,
+        scored: mine.filter(function (m) { return SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
+        scores: scores, overall: round2(mean(axisVals)),
+        weight: weights.length ? { min: round1(Math.min.apply(null, weights)), max: round1(Math.max.apply(null, weights)) } : null,
+        power: round1(mean(mine.map(function (m) { return m.engine_power === '' ? null : Number(m.engine_power); }))),
+        pwr: round2(mean(mine.map(powerPerTon))),
+        years: years.length ? { min: Math.min.apply(null, years), max: Math.max.apply(null, years) } : null,
+        tags: tagCounts(mine).slice(0, 3),
+        latest: mine.map(function (m) { return toDateStr(m.collected_at); }).filter(Boolean).sort().pop() || '',
+        incomplete: mine.filter(function (m) { return !completeness(m).ok; }).length,
+        confirmed: mine.filter(function (m) { return m.human_review_status === '확정'; }).length
+      };
+    });
+  }
+
+  /* 점수 비교 — 축별 전체 평균(모델 단위)과 브랜드 평균의 차이 */
+  function scoreComparison(models, summary) {
+    var rows = summary || brandSummary(models);
+    var axes = SCORE_AXES.map(function (a) {
+      var vals = models.map(function (m) { return scoreOf(m, a.key); }).filter(function (x) { return x != null; });
+      var avg = round2(mean(vals));
+      var best = null;
+      rows.forEach(function (r) { var v = r.scores[a.key]; if (v != null && (!best || v > best.value)) best = { brand: r.brand, value: v }; });
+      return { key: a.key, axis: a.axis, name: a.name, avg: avg, n: vals.length, best: best };
+    });
+    var table = rows.map(function (r) {
+      var diff = {};
+      axes.forEach(function (a) { diff[a.key] = r.scores[a.key] == null || a.avg == null ? null : round2(r.scores[a.key] - a.avg); });
+      return { brand: r.brand, short: r.short, scores: r.scores, diff: diff, overall: r.overall };
+    });
+    return { axes: axes, rows: table };
+  }
+
+  /* 강·약점 추출 — 축 평균보다 threshold(기본 0.5점) 이상 높으면 강점, 낮으면 약점.
+     제원은 출력 대비 중량(kW/t)이 전체 평균보다 10% 이상 높거나 낮을 때 적습니다. */
+  function strengthsWeaknesses(models, opts) {
+    opts = opts || {};
+    var th = opts.threshold == null ? 0.5 : opts.threshold;
+    var summary = opts.summary || brandSummary(models);
+    var cmp = scoreComparison(models, summary);
+    var pwrAll = mean(models.map(powerPerTon));
+    return summary.map(function (r) {
+      var s = [], w = [], notes = [];
+      cmp.axes.forEach(function (a) {
+        var v = r.scores[a.key];
+        if (v == null || a.avg == null) return;
+        var d = round2(v - a.avg);
+        var item = { type: 'score', key: a.key, name: a.name, value: v, diff: d, text: a.name + ' ' + v + '점 (평균 ' + a.avg + ', ' + (d > 0 ? '+' : '') + d + ')' };
+        if (d >= th) s.push(item); else if (d <= -th) w.push(item);
+      });
+      if (r.pwr != null && pwrAll) {
+        var rel = (r.pwr - pwrAll) / pwrAll;
+        var pct = Math.round(rel * 100);
+        var it = { type: 'spec', key: 'pwr', name: '출력 대비 중량', value: r.pwr, diff: pct,
+          text: '출력 대비 중량 ' + r.pwr + ' kW/t (평균 ' + round2(pwrAll) + ', ' + (pct > 0 ? '+' : '') + pct + '%)' };
+        if (rel >= 0.1) s.push(it); else if (rel <= -0.1) w.push(it);
+      }
+      s.sort(function (a, b) { return b.diff - a.diff; });
+      w.sort(function (a, b) { return a.diff - b.diff; });
+      if (!r.scored) notes.push('평가 점수가 없어 점수 비교에서 빠졌습니다.');
+      if (r.incomplete) notes.push('필수 메타 누락 ' + r.incomplete + '건 — 근거 확인이 필요합니다.');
+      return { brand: r.brand, short: r.short, strengths: s, weaknesses: w, notes: notes };
+    });
+  }
+
+  /* Design Tag 트렌드 — 태그별 건수·비율·쓰는 브랜드, 최근 2개 연식(최신 연도와 그 전 해) 건수 */
+  function tagTrends(models) {
+    var years = models.map(function (m) { return Number(m.release_year); }).filter(function (x) { return x > 1900; });
+    var latest = years.length ? Math.max.apply(null, years) : null;
+    return tagCounts(models).map(function (t) {
+      var withTag = models.filter(function (m) { return (m.design_tags || []).indexOf(t.tag) >= 0; });
+      return {
+        tag: t.tag, count: t.count, share: models.length ? Math.round(t.count / models.length * 100) : 0,
+        brands: brandOrder(withTag.map(function (m) { return m.brand; }).filter(function (b, i, a) { return a.indexOf(b) === i; })).map(brandShort),
+        recent: latest == null ? 0 : withTag.filter(function (m) { return Number(m.release_year) >= latest - 1; }).length
+      };
+    });
+  }
+
+  /* White Space — 전체 평균이 낮은 축부터. 최고 브랜드도 4점 미만이면 「비어 있는 자리」로 표시 */
+  function whiteSpace(cmp) {
+    return cmp.axes.filter(function (a) { return a.avg != null; }).slice().sort(function (a, b) { return a.avg - b.avg; })
+      .map(function (a) { return { key: a.key, name: a.name, avg: a.avg, best: a.best, open: !a.best || a.best.value < 4 }; });
+  }
+
+  function buildInsight(models) {
+    var summary = brandSummary(models);
+    var cmp = scoreComparison(models, summary);
+    var sw = strengthsWeaknesses(models, { summary: summary });
+    var tags = tagTrends(models);
+    var ws = whiteSpace(cmp);
+    var head = [];
+    var ranked = summary.filter(function (r) { return r.overall != null; }).sort(function (a, b) { return b.overall - a.overall; });
+    if (ranked.length) head.push('평가 평균이 가장 높은 브랜드는 ' + ranked[0].short + '(' + ranked[0].overall + '점)' +
+      (ranked.length > 1 ? ', 가장 낮은 브랜드는 ' + ranked[ranked.length - 1].short + '(' + ranked[ranked.length - 1].overall + '점)' : '') + '입니다.');
+    else if (models.length) head.push('평가 점수가 아직 없습니다. 아래 「평가 점수 빠른 입력」에서 1~5점을 넣어 주세요.');
+    if (tags.length) head.push('가장 많이 관찰된 Design Tag 는 「' + tags[0].tag + '」(' + tags[0].count + '건, ' + tags[0].share + '%)입니다.');
+    if (ws.length) head.push('전체 평균이 가장 낮은 축은 ' + ws[0].name + '(' + ws[0].avg + '점)입니다' + (ws[0].open ? ' — 최고 브랜드도 4점 미만이라 차별화 여지를 검토해 주세요.' : '.'));
+    return {
+      count: models.length, brandCount: summary.length,
+      scoredCount: models.filter(function (m) { return SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
+      summary: summary, scores: cmp, sw: sw, tags: tags, whitespace: ws, headline: head
+    };
+  }
+
+  /* AI 요약 반자동 — 수치 요약을 프롬프트로 만들어 ChatGPT 등에 붙여 넣고, 답을 다시 붙여 넣습니다.
+     모델명·점수만 들어가고 이미지·출처 URL 은 넣지 않습니다(사내 보안정책 검토 전). */
+  function insightPrompt(ins, scope) {
+    var L = [];
+    L.push('당신은 건설장비(굴착기·휠로더) 외장·실내 디자인 벤치마킹 전문가입니다.');
+    L.push('아래는 경쟁사 모델을 디자이너가 1~5점으로 평가하고 Design Tag 를 붙인 요약입니다.');
+    L.push('이 숫자와 태그만 근거로, 한국어로 다음 네 가지를 정리해 줘. 숫자에 없는 내용은 추측하지 말고 「자료 부족」이라고 적어 줘.');
+    L.push('1) 주요 디자인 트렌드 3가지  2) 브랜드별 포지셔닝 한 줄씩  3) White Space(차별화 기회)  4) 다음 조사에서 보완할 자료');
+    L.push('');
+    L.push('[범위] ' + (scope ? scope.scope_id + ' · ' + scope.equipment_type + ' · ' + scope.tonnage_class : '전체 자료') + ' · 모델 ' + ins.count + '건 · 브랜드 ' + ins.brandCount + '개');
+    L.push('[축별 평균] ' + ins.scores.axes.map(function (a) { return a.name + ' ' + (a.avg == null ? '-' : a.avg); }).join(' / '));
+    L.push('[브랜드별 평균 점수 · 출력대비중량(kW/t) · 주요 태그]');
+    ins.summary.forEach(function (r) {
+      L.push('- ' + r.short + ' (' + r.models + '건): ' + SCORE_AXES.map(function (a) { return a.axis + ' ' + (r.scores[a.key] == null ? '-' : r.scores[a.key]); }).join(', ') +
+        ' · ' + (r.pwr == null ? '-' : r.pwr) + ' kW/t · ' + (r.tags.map(function (t) { return t.tag; }).join(', ') || '태그 없음'));
+    });
+    L.push('[Design Tag 빈도] ' + ins.tags.slice(0, 10).map(function (t) { return t.tag + ' ' + t.count; }).join(', '));
+    return L.join('\n');
+  }
+
+  /* ── 전문가(디자이너) 피드백 — 리포트 항목별 평가·코멘트 기록 ── */
+  var REPORT_SECTIONS = [
+    { id: 'overview', name: '1. Overview · 범위' },
+    { id: 'brands', name: '2. 브랜드별 요약' },
+    { id: 'scores', name: '3. 점수 비교' },
+    { id: 'sw', name: '4. 강·약점' },
+    { id: 'trend', name: '5. Design Trend · White Space' },
+    { id: 'note', name: '6. 요약 코멘트' },
+    { id: 'compare', name: '7. 선택 모델 비교' },
+    { id: 'feedback', name: '8. 전문가 피드백' },
+    { id: 'ops', name: '9. 자료 신선도 · 운영' }
+  ];
+  /* 프로토타입 11 Designer Validation 의 분류 4종 + 동의·추가 분석 요청 */
+  var FEEDBACK_TYPES = ['동의(수정 없음)', '분석 결과 수정 필요', '디자인 Tag 보정', 'Taxonomy·기준 조정', '예외 사례 등록', '추가 분석 요청'];
+  var FEEDBACK_STATUS = ['열림', '반영됨'];
+  function sectionName(id) { var s = REPORT_SECTIONS.filter(function (x) { return x.id === id; })[0]; return s ? s.name : id; }
+  function feedbackTargetLabel(target, models) {
+    if (String(target).indexOf('model:') === 0) {
+      var id = target.slice(6);
+      var m = (models || []).filter(function (x) { return x.id === id; })[0];
+      return '모델 · ' + (m ? brandShort(m.brand) + ' ' + m.model_name : id + '(삭제됨)');
+    }
+    return '리포트 · ' + sectionName(target);
+  }
+  function stampTime(d) {
+    d = d || new Date();
+    return toDateStr(d) + ' ' + pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2);
+  }
+  function validateFeedback(fb) {
+    var errs = [];
+    var t = str(fb && fb.target);
+    if (!t || (t.indexOf('model:') !== 0 && !REPORT_SECTIONS.some(function (s) { return s.id === t; }))) errs.push('target');
+    if (FEEDBACK_TYPES.indexOf(fb && fb.type) < 0) errs.push('type');
+    var r = Number(fb && fb.rating);
+    if (!(r >= 1 && r <= 5 && Math.round(r) === r)) errs.push('rating');
+    if (!str(fb && fb.author)) errs.push('author');
+    if (fb && fb.type !== FEEDBACK_TYPES[0] && !str(fb.comment)) errs.push('comment');
+    return errs;
+  }
+  /* 기록은 쌓기만 합니다. 내용은 고치지 않고 상태(열림 → 반영됨)만 바꿉니다 */
+  function addFeedback(list, input, now, scopeId) {
+    var errs = validateFeedback(input);
+    if (errs.length) return { ok: false, errors: errs, list: list };
+    var max = 0;
+    list.forEach(function (x) { var n = Number(String(x.id).replace(/^FB/, '')); if (n > max) max = n; });
+    var item = {
+      id: 'FB' + pad(max + 1, 4), target: str(input.target), type: input.type, rating: Number(input.rating),
+      comment: str(input.comment), author: str(input.author), created_at: stampTime(now), scope_id: scopeId || '',
+      status: '열림', resolved_at: ''
+    };
+    return { ok: true, item: item, list: list.concat([item]) };
+  }
+  function setFeedbackStatus(list, id, status, now) {
+    if (FEEDBACK_STATUS.indexOf(status) < 0) return list;
+    return list.map(function (x) {
+      if (x.id !== id) return x;
+      var c = JSON.parse(JSON.stringify(x));
+      c.status = status; c.resolved_at = status === '반영됨' ? stampTime(now) : '';
+      return c;
+    });
+  }
+  /* 항목별 요약 — 건수·평균 평가·열린 건·최근 작성 */
+  function feedbackSummary(list) {
+    var targets = REPORT_SECTIONS.map(function (s) { return s.id; });
+    list.forEach(function (x) { if (targets.indexOf(x.target) < 0) targets.push(x.target); });
+    return targets.map(function (t) {
+      var mine = list.filter(function (x) { return x.target === t; });
+      return {
+        target: t, count: mine.length, avg: round1(mean(mine.map(function (x) { return x.rating; }))),
+        open: mine.filter(function (x) { return x.status !== '반영됨'; }).length,
+        latest: mine.map(function (x) { return x.created_at; }).sort().pop() || '',
+        types: FEEDBACK_TYPES.map(function (ty) { return { type: ty, count: mine.filter(function (x) { return x.type === ty; }).length }; }).filter(function (x) { return x.count; })
+      };
+    }).filter(function (r) { return r.count || REPORT_SECTIONS.some(function (s) { return s.id === r.target; }); });
+  }
+  function restoreFeedback(p) {
+    if (!Array.isArray(p)) return [];
+    return p.filter(function (x) { return x && x.id && validateFeedback(x).length === 0; }).map(function (x) {
+      return { id: String(x.id), target: str(x.target), type: x.type, rating: Number(x.rating), comment: str(x.comment), author: str(x.author),
+        created_at: str(x.created_at), scope_id: str(x.scope_id), status: FEEDBACK_STATUS.indexOf(x.status) >= 0 ? x.status : '열림', resolved_at: str(x.resolved_at) };
+    });
+  }
+
+  /* ── 정기 업데이트 · 운영 루프 ── */
+  var UPDATE_CYCLES = [
+    { id: 'weekly', name: '주간', days: 7 },
+    { id: 'biweekly', name: '격주', days: 14 },
+    { id: 'monthly', name: '월간', months: 1 },
+    { id: 'quarterly', name: '분기', months: 3 }
+  ];
+  /* 프로토타입 13 의 운영 루프(Scheduled Update → Collection → Normalize/QA → Analysis → Knowledge → Dashboard)에
+     10 Report · 11 Validation · 12 Tuning 을 이어 한 바퀴로 만들었습니다. href 는 이 도구의 메뉴입니다 */
+  var OPS_STEPS = [
+    { id: 'collect', name: '신규·변경 자료 수집·등록', href: '#/edit', menu: '05 자료 등록 · 06 가져오기' },
+    { id: 'qa', name: '필수 메타 누락·톤급 점검', href: '#/dashboard', menu: '02 Status Dashboard' },
+    { id: 'analyze', name: '관찰 입력·평가 점수 갱신', href: '#/insight', menu: '05 자료 등록 · 07 Insight(빠른 입력)' },
+    { id: 'insight', name: '인사이트 확인·요약 코멘트', href: '#/insight', menu: '07 Insight' },
+    { id: 'report', name: 'Benchmarking Report 발행', href: '#/report', menu: '08 Report' },
+    { id: 'feedback', name: '전문가 피드백 검토·반영', href: '#/feedback', menu: '09 전문가 피드백' },
+    { id: 'tune', name: 'Tag·Taxonomy·Schema 보정 기록', href: '#/ops', menu: '10 운영 루프(완료 메모)' }
+  ];
+  var DAY = 86400000;
+  function parseDay(s) {
+    var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+  }
+  function fmtDay(t) { var d = new Date(t); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1, 2) + '-' + pad(d.getUTCDate(), 2); }
+  function daysBetween(a, b) { var x = parseDay(a), y = parseDay(b); return x == null || y == null ? null : Math.round((y - x) / DAY); }
+  function addDays(s, n) { var t = parseDay(s); return t == null ? '' : fmtDay(t + n * DAY); }
+  /* 달 더하기 — 1/31 + 1달 = 2/28(윤년 29) 처럼 그 달 마지막 날로 맞춥니다 */
+  function addMonths(s, n) {
+    var t = parseDay(s);
+    if (t == null) return '';
+    var d = new Date(t), y = d.getUTCFullYear(), mo = d.getUTCMonth() + n, day = d.getUTCDate();
+    var last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+    return fmtDay(Date.UTC(y, mo, Math.min(day, last)));
+  }
+  function cycleById(id) { return UPDATE_CYCLES.filter(function (c) { return c.id === id; })[0] || UPDATE_CYCLES[2]; }
+  function nextDue(last, cycleId) {
+    if (parseDay(last) == null) return '';
+    var c = cycleById(cycleId);
+    return c.days ? addDays(last, c.days) : addMonths(last, c.months);
+  }
+  function defaultOps() { return { cycle: 'monthly', stale_days: 180, last_update: '', steps: {}, history: [] }; }
+  function restoreOps(p) {
+    var o = defaultOps();
+    if (!p || typeof p !== 'object') return o;
+    if (UPDATE_CYCLES.some(function (c) { return c.id === p.cycle; })) o.cycle = p.cycle;
+    var sd = Number(p.stale_days);
+    if (sd >= 7 && sd <= 3650) o.stale_days = Math.round(sd);
+    if (parseDay(p.last_update) != null) o.last_update = toDateStr(p.last_update);
+    if (p.steps && typeof p.steps === 'object') OPS_STEPS.forEach(function (s) { if (p.steps[s.id]) o.steps[s.id] = str(p.steps[s.id]) || true; });
+    if (Array.isArray(p.history)) o.history = p.history.filter(function (h) { return h && parseDay(h.date) != null; }).map(function (h) {
+      return { date: toDateStr(h.date), cycle: str(h.cycle), steps_done: Array.isArray(h.steps_done) ? h.steps_done.map(str) : [], note: str(h.note), models: Number(h.models) || 0 };
+    });
+    return o;
+  }
+  /* 오래된 자료 — 수집일이 stale_days 보다 오래된 모델. 수집일이 없으면 따로 셉니다 */
+  function staleModels(models, now, staleDays) {
+    var today = toDateStr(now || new Date());
+    var stale = [], undated = [];
+    models.forEach(function (m) {
+      var c = toDateStr(m.collected_at);
+      if (!c) { undated.push(m); return; }
+      var age = daysBetween(c, today);
+      if (age > staleDays) stale.push({ id: m.id, brand: m.brand, model_name: m.model_name, collected_at: c, age: age });
+    });
+    stale.sort(function (a, b) { return b.age - a.age; });
+    return { stale: stale, undated: undated.map(function (m) { return { id: m.id, brand: m.brand, model_name: m.model_name }; }) };
+  }
+  /* state: none(갱신 기록 없음) · ok · soon(3일 이내) · due(오늘) · overdue(지남) */
+  function opsStatus(ops, models, now, extra) {
+    ops = ops || defaultOps(); extra = extra || {};
+    var today = toDateStr(now || new Date());
+    var next = ops.last_update ? nextDue(ops.last_update, ops.cycle) : '';
+    var left = next ? daysBetween(today, next) : null;
+    var state = !next ? 'none' : left < 0 ? 'overdue' : left === 0 ? 'due' : left <= 3 ? 'soon' : 'ok';
+    var st = staleModels(models || [], now, ops.stale_days);
+    var done = OPS_STEPS.filter(function (s) { return ops.steps && ops.steps[s.id]; }).length;
+    return {
+      cycle: cycleById(ops.cycle), last: ops.last_update, next: next, daysLeft: left, state: state,
+      stale: st.stale, undated: st.undated, staleDays: ops.stale_days,
+      stepsDone: done, stepsTotal: OPS_STEPS.length,
+      hints: {
+        qa: (models || []).filter(function (m) { return !completeness(m).ok; }).length,
+        analyze: (models || []).filter(function (m) { return !SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
+        feedback: extra.openFeedback || 0
+      }
+    };
+  }
+  function toggleStep(ops, stepId, on, now) {
+    var o = restoreOps(ops);
+    if (!OPS_STEPS.some(function (s) { return s.id === stepId; })) return o;
+    if (on) o.steps[stepId] = toDateStr(now || new Date()); else delete o.steps[stepId];
+    return o;
+  }
+  /* 사이클 완료 — 마지막 갱신일을 오늘로, 이력에 남기고 단계 체크를 비웁니다 */
+  function completeCycle(ops, now, note, modelCount) {
+    var o = restoreOps(ops);
+    var today = toDateStr(now || new Date());
+    o.history.unshift({ date: today, cycle: o.cycle, steps_done: OPS_STEPS.filter(function (s) { return o.steps[s.id]; }).map(function (s) { return s.id; }), note: str(note), models: modelCount || 0 });
+    o.last_update = today;
+    o.steps = {};
+    return o;
+  }
+
+  /* ── Benchmarking Report — 화면·인쇄·xlsx·HTML 이 모두 이 한 덩어리를 씁니다 ── */
+  function reportModels(db, opts) {
+    opts = opts || {};
+    var sc = activeScope(db);
+    if (sc && opts.useScope !== false) return db.models.filter(function (m) { return inScope(m, sc); });
+    if (opts.equipment_type) return db.models.filter(function (m) { return m.equipment_type === opts.equipment_type; });
+    return db.models.slice();
+  }
+  function buildReport(db, opts) {
+    opts = opts || {};
+    var now = opts.now || new Date();
+    var sc = opts.useScope === false ? null : activeScope(db);
+    var models = reportModels(db, opts);
+    var ins = buildInsight(models);
+    var ids = models.map(function (m) { return m.id; });
+    var cmpModels = (db.compare || []).map(function (id) { return db.models.filter(function (m) { return m.id === id; })[0]; }).filter(Boolean);
+    var fb = (db.feedback || []).filter(function (x) { return x.target.indexOf('model:') !== 0 || ids.indexOf(x.target.slice(6)) >= 0; });
+    var tc = sc ? tonnageClass(sc.equipment_type, sc.tonnage_class) : null;
+    return {
+      title: (tc ? tc.name : opts.equipment_type ? opts.equipment_type : '전체 장비') + ' Design Benchmark',
+      generated_at: stampTime(now), schema_version: SCHEMA_VERSION, sample: !!db._sample,
+      scope: sc ? { scope_id: sc.scope_id, equipment_type: sc.equipment_type, tonnage: tc ? tc.name + ' (' + tc.range + ')' : sc.tonnage_class,
+        brands: sc.brands.map(brandShort), purposes: sc.purposes.slice() } : null,
+      filterLabel: sc ? 'Scope ' + sc.scope_id : opts.equipment_type ? opts.equipment_type + ' 전체' : '전체 자료',
+      overview: {
+        models: models.length, brands: ins.brandCount,
+        images: models.reduce(function (n, m) { return n + (m.media || []).length; }, 0),
+        incomplete: models.filter(function (m) { return !completeness(m).ok; }).length,
+        confirmed: models.filter(function (m) { return m.human_review_status === '확정'; }).length,
+        scored: ins.scoredCount
+      },
+      insight: ins,
+      note: db.insightNote && str(db.insightNote.text) ? { text: str(db.insightNote.text), origin: str(db.insightNote.origin), saved_at: str(db.insightNote.saved_at) } : null,
+      compare: cmpModels.length >= 2 ? {
+        models: cmpModels.map(function (m) { return brandShort(m.brand) + ' ' + m.model_name; }),
+        rows: compareRows(cmpModels, { hideEmpty: true }).filter(function (r) { return ['identity', 'engineering', 'design', 'cabin', 'cmf', 'service'].some(function (b) { return BLOCKS.filter(function (x) { return x.id === b && x.name === r.block; }).length; }); })
+      } : null,
+      feedback: { items: fb.map(function (x) { var c = JSON.parse(JSON.stringify(x)); c.target_label = feedbackTargetLabel(x.target, db.models); return c; }), summary: feedbackSummary(fb) },
+      ops: opsStatus(db.ops, models, now, { openFeedback: fb.filter(function (x) { return x.status !== '반영됨'; }).length })
+    };
+  }
+  function fmtScore(v) { return v == null ? '-' : String(v); }
+  function fmtDiff(v) { return v == null ? '-' : (v > 0 ? '+' : '') + v; }
+  /* xlsx 시트들 — [{ name, aoa }] */
+  function reportSheets(rep) {
+    var out = [];
+    var o = rep.overview;
+    out.push({ name: '요약', aoa: [
+      ['Benchmarking Report', rep.title], ['작성 시각', rep.generated_at], ['범위', rep.filterLabel],
+      ['장비군 · 톤급', rep.scope ? rep.scope.equipment_type + ' · ' + rep.scope.tonnage : '-'],
+      ['Scope 경쟁사', rep.scope ? rep.scope.brands.join(', ') : '-'], ['목적', rep.scope ? rep.scope.purposes.join(', ') : '-'],
+      ['모델', o.models], ['브랜드', o.brands], ['이미지', o.images], ['필수 메타 누락', o.incomplete], ['검증 확정', o.confirmed], ['평가 점수 입력', o.scored],
+      ['schema_version', rep.schema_version], ['예시 데이터', rep.sample ? '예 — 모두 가상 값' : '아니오'], [],
+      ['주요 인사이트']
+    ].concat(rep.insight.headline.map(function (x) { return ['', x]; }))
+      .concat(rep.note ? [[], ['요약 코멘트 (' + (rep.note.origin || '작성') + ', ' + rep.note.saved_at + ')', rep.note.text]] : []) });
+    out.push({ name: '브랜드요약', aoa: [['브랜드', '모델 수', '평가 입력', '평가 평균'].concat(SCORE_AXES.map(function (a) { return a.name; }))
+      .concat(['운전중량 범위(t)', '평균 출력(kW)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일', '필수 메타 누락', '검증 확정'])]
+      .concat(rep.insight.summary.map(function (r) {
+        return [r.short, r.models, r.scored, fmtScore(r.overall)].concat(SCORE_AXES.map(function (a) { return fmtScore(r.scores[a.key]); }))
+          .concat([r.weight ? r.weight.min + ' ~ ' + r.weight.max : '-', fmtScore(r.power), fmtScore(r.pwr), r.years ? r.years.min + ' ~ ' + r.years.max : '-',
+            r.tags.map(function (t) { return t.tag + '(' + t.count + ')'; }).join(', '), r.latest || '-', r.incomplete, r.confirmed]);
+      })) });
+    var cmp = rep.insight.scores;
+    out.push({ name: '점수비교', aoa: [['브랜드'].concat(cmp.axes.map(function (a) { return a.name; })).concat(cmp.axes.map(function (a) { return a.name + ' 평균 대비'; }))]
+      .concat(cmp.rows.map(function (r) { return [r.short].concat(cmp.axes.map(function (a) { return fmtScore(r.scores[a.key]); })).concat(cmp.axes.map(function (a) { return fmtDiff(r.diff[a.key]); })); }))
+      .concat([['축 평균(모델 단위)'].concat(cmp.axes.map(function (a) { return fmtScore(a.avg); }))]) });
+    out.push({ name: '강약점', aoa: [['브랜드', '구분', '내용']].concat([].concat.apply([], rep.insight.sw.map(function (r) {
+      var rows = r.strengths.map(function (x) { return [r.short, '강점', x.text]; }).concat(r.weaknesses.map(function (x) { return [r.short, '약점', x.text]; }))
+        .concat(r.notes.map(function (x) { return [r.short, '참고', x]; }));
+      return rows.length ? rows : [[r.short, '-', '평균과 큰 차이 없음']];
+    }))) });
+    out.push({ name: '태그트렌드', aoa: [['Design Tag', '건수', '비율(%)', '최근 2개 연식 건수', '브랜드']].concat(rep.insight.tags.map(function (t) { return [t.tag, t.count, t.share, t.recent, t.brands.join(', ')]; }))
+      .concat([[], ['White Space (평균 낮은 축부터)', '축 평균', '최고 브랜드', '최고 점수', '비어 있는 자리']])
+      .concat(rep.insight.whitespace.map(function (w) { return [w.name, w.avg, w.best ? brandShort(w.best.brand) : '-', w.best ? w.best.value : '-', w.open ? '예' : '']; })) });
+    if (rep.compare) out.push({ name: '선택비교', aoa: [['블록', '구분', '항목'].concat(rep.compare.models).concat(['차이'])]
+      .concat(rep.compare.rows.map(function (r) { return [r.block, r.kind, r.label].concat(r.values).concat([r.differs ? '차이 있음' : '']); })) });
+    out.push({ name: '전문가피드백', aoa: [['ID', '대상', '분류', '평가(1~5)', '코멘트', '작성자', '작성 시각', '상태', '반영 시각']]
+      .concat(rep.feedback.items.map(function (x) { return [x.id, x.target_label, x.type, x.rating, x.comment, x.author, x.created_at, x.status, x.resolved_at]; })) });
+    var ops = rep.ops;
+    out.push({ name: '운영', aoa: [['업데이트 주기', ops.cycle.name], ['마지막 갱신일', ops.last || '-'], ['다음 예정일', ops.next || '-'],
+      ['오래된 자료 기준(일)', ops.staleDays], ['오래된 자료', ops.stale.length], ['수집일 없음', ops.undated.length], [],
+      ['모델', '수집일', '경과(일)']].concat(ops.stale.map(function (s) { return [brandShort(s.brand) + ' ' + s.model_name, s.collected_at, s.age]; })) });
+    return out;
+  }
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  /* 리포트 본문 스타일 — 화면(.rp 안)과 내려받는 HTML 이 같은 규칙을 씁니다 */
+  var REPORT_CSS = [
+    '.rp{color:#16202c;font-size:14px;line-height:1.6;word-break:keep-all;overflow-wrap:break-word}',
+    '.rp h1{font-size:1.5rem;margin:0 0 4px}.rp h2{font-size:1.1rem;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #0f2544}',
+    '.rp .rp-cover{border-left:6px solid #2f73d9;padding:6px 0 6px 14px;margin-bottom:18px}.rp .rp-meta{color:#56616f;font-size:.9rem}',
+    '.rp section{margin:0 0 22px;break-inside:avoid-page}.rp .rp-sample{background:#fff4d6;border:1px solid #e8cf85;padding:6px 10px;border-radius:8px;font-size:.9rem}',
+    '.rp .rp-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:8px 0}',
+    '.rp .rp-tile{border:1px solid #d6dde6;border-radius:8px;padding:8px 10px}.rp .rp-tile b{display:block;font-size:1.2rem}.rp .rp-tile span{color:#56616f;font-size:.85rem}',
+    '.rp .rp-wrap{overflow-x:auto}.rp table{border-collapse:collapse;width:100%;font-size:.88rem}',
+    '.rp th,.rp td{border:1px solid #d6dde6;padding:5px 7px;text-align:left;vertical-align:top}.rp th{background:#eef2f7}',
+    '.rp td.n{text-align:right;white-space:nowrap}.rp td.up{background:#e3f4e8}.rp td.down{background:#fde8e6}.rp tr.diff td{background:#fff9e0}',
+    '.rp ul{margin:4px 0 0;padding-left:20px}.rp .rp-sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}',
+    '.rp .rp-card{border:1px solid #d6dde6;border-radius:8px;padding:8px 12px}.rp .rp-card h3{font-size:1rem;margin:0 0 4px}',
+    '.rp .ok{color:#1b6e3a}.rp .bad{color:#b3261e}.rp .muted{color:#56616f}.rp .rp-note{white-space:pre-line;border:1px solid #d6dde6;border-radius:8px;padding:10px 12px;background:#f7f9fc}'
+  ].join('\n');
+  function tbl(head, rows, numCols) {
+    numCols = numCols || [];
+    return '<div class="rp-wrap"><table><thead><tr>' + head.map(function (x) { return '<th scope="col">' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        var cls = r._cls ? ' class="' + r._cls + '"' : '';
+        return '<tr' + cls + '>' + r.map(function (c, i) {
+          var cc = c && typeof c === 'object' ? c : { v: c };
+          var k = [numCols.indexOf(i) >= 0 ? 'n' : '', cc.cls || ''].join(' ').trim();
+          return '<td' + (k ? ' class="' + k + '"' : '') + '>' + esc(cc.v == null || cc.v === '' ? '-' : cc.v) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  /* 리포트 본문 HTML (data-section 으로 항목을 표시 — 화면에서 항목별 피드백 버튼을 붙입니다) */
+  function reportBodyHtml(rep) {
+    var o = rep.overview, ins = rep.insight, H = [];
+    function sec(id, inner) { H.push('<section data-section="' + id + '"><h2>' + esc(sectionName(id)) + '</h2>' + inner + '</section>'); }
+    H.push('<div class="rp-cover"><div class="rp-meta">DESIGN BENCHMARKING AGENT · Benchmarking Report</div><h1>' + esc(rep.title) + '</h1>' +
+      '<div class="rp-meta">' + esc(rep.filterLabel) + ' · 작성 ' + esc(rep.generated_at) + ' · schema ' + esc(rep.schema_version) + '</div></div>');
+    if (rep.sample) H.push('<p class="rp-sample">예시 데이터 — 모델명(「예시-」)·제원·점수·출처는 모두 시연용 가상 값입니다. 브랜드 이름만 경쟁사 목록을 빌렸습니다.</p>');
+    sec('overview', (rep.scope ? '<p>' + esc(rep.scope.equipment_type + ' · ' + rep.scope.tonnage) + '<br>경쟁사 ' + rep.scope.brands.length + '개: ' + esc(rep.scope.brands.join(', ')) + '<br>목적: ' + esc(rep.scope.purposes.join(', ')) + '</p>' : '<p class="muted">Scope 를 지정하지 않아 ' + esc(rep.filterLabel) + '를 대상으로 했습니다.</p>') +
+      '<div class="rp-tiles">' + [['모델', o.models + '건'], ['브랜드', o.brands + '개'], ['이미지', o.images + '장'], ['평가 입력', o.scored + '건'], ['검증 확정', o.confirmed + '건'], ['필수 메타 누락', o.incomplete + '건']]
+        .map(function (t) { return '<div class="rp-tile"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>'; }).join('') + '</div>' +
+      (ins.headline.length ? '<ul>' + ins.headline.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''));
+    sec('brands', ins.summary.length ? tbl(['브랜드', '모델', '평가 평균', '운전중량(t)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일'],
+      ins.summary.map(function (r) { return [r.short, r.models, fmtScore(r.overall), r.weight ? r.weight.min + ' ~ ' + r.weight.max : '', fmtScore(r.pwr), r.years ? r.years.min + ' ~ ' + r.years.max : '', r.tags.map(function (t) { return t.tag; }).join(', '), r.latest]; }), [1, 2, 4]) : '<p class="muted">대상 모델이 없습니다.</p>');
+    var cmp = ins.scores;
+    sec('scores', cmp.rows.length ? tbl(['브랜드'].concat(cmp.axes.map(function (a) { return a.name; })).concat(['평균']),
+      cmp.rows.map(function (r) {
+        return [r.short].concat(cmp.axes.map(function (a) {
+          var d = r.diff[a.key];
+          return { v: r.scores[a.key] == null ? '' : r.scores[a.key] + ' (' + fmtDiff(d) + ')', cls: d == null ? '' : d >= 0.5 ? 'up' : d <= -0.5 ? 'down' : '' };
+        })).concat([fmtScore(r.overall)]);
+      }).concat([['축 평균'].concat(cmp.axes.map(function (a) { return fmtScore(a.avg); })).concat([''])]), [1, 2, 3, 4, 5]) +
+      '<p class="muted">괄호는 축 평균(모델 단위) 대비 차이입니다. 0.5점 이상 높으면 초록, 낮으면 빨강입니다.</p>' : '<p class="muted">대상 모델이 없습니다.</p>');
+    sec('sw', '<div class="rp-sw">' + ins.sw.map(function (r) {
+      return '<div class="rp-card"><h3>' + esc(r.short) + '</h3>' +
+        (r.strengths.length ? '<div class="ok">강점</div><ul>' + r.strengths.map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('') + '</ul>' : '') +
+        (r.weaknesses.length ? '<div class="bad">약점</div><ul>' + r.weaknesses.map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('') + '</ul>' : '') +
+        (!r.strengths.length && !r.weaknesses.length ? '<div class="muted">평균과 큰 차이가 없습니다.</div>' : '') +
+        (r.notes.length ? '<ul class="muted">' + r.notes.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+    }).join('') + '</div>');
+    sec('trend', (ins.tags.length ? tbl(['Design Tag', '건수', '비율', '최근 2개 연식', '브랜드'], ins.tags.slice(0, 12).map(function (t) { return [t.tag, t.count, t.share + '%', t.recent, t.brands.join(', ')]; }), [1, 2, 3]) : '<p class="muted">Design Tag 가 없습니다.</p>') +
+      (ins.whitespace.length ? '<p><b>White Space</b> — 전체 평균이 낮은 축부터</p><ul>' + ins.whitespace.map(function (w) {
+        return '<li>' + esc(w.name + ' 평균 ' + w.avg + '점 · 최고 ' + (w.best ? brandShort(w.best.brand) + ' ' + w.best.value + '점' : '-') + (w.open ? ' — 최고 브랜드도 4점 미만(비어 있는 자리)' : '')) + '</li>';
+      }).join('') + '</ul>' : ''));
+    sec('note', rep.note ? '<div class="rp-note">' + esc(rep.note.text) + '</div><p class="muted">' + esc((rep.note.origin || '작성') + ' · ' + rep.note.saved_at) + '</p>' : '<p class="muted">요약 코멘트가 없습니다. 07 Insight 에서 작성하거나 AI 요약을 붙여 넣어 주세요.</p>');
+    sec('compare', rep.compare ? tbl(['블록', '항목'].concat(rep.compare.models), rep.compare.rows.map(function (r) { var row = [r.block, r.label].concat(r.values); if (r.differs) row._cls = 'diff'; return row; })) +
+      '<p class="muted">값이 서로 다른 행은 노란색입니다.</p>' : '<p class="muted">비교함에 2개 이상 담으면 이 자리에 비교표가 들어갑니다(03 Card Gallery).</p>');
+    var fbs = rep.feedback;
+    sec('feedback', fbs.items.length ? tbl(['대상', '분류', '평가', '코멘트', '작성자 · 시각', '상태'], fbs.items.map(function (x) { return [x.target_label, x.type, x.rating + ' / 5', x.comment, x.author + ' · ' + x.created_at, x.status]; }), [2]) : '<p class="muted">아직 피드백이 없습니다.</p>');
+    var op = rep.ops;
+    sec('ops', '<p>업데이트 주기 ' + esc(op.cycle.name) + ' · 마지막 갱신 ' + esc(op.last || '기록 없음') + ' · 다음 예정 ' + esc(op.next || '-') +
+      (op.state === 'overdue' ? ' <b class="bad">(예정일 ' + (-op.daysLeft) + '일 지남)</b>' : '') + '</p>' +
+      '<p>수집일이 ' + op.staleDays + '일 넘은 자료 ' + op.stale.length + '건 · 수집일 없음 ' + op.undated.length + '건</p>' +
+      (op.stale.length ? tbl(['모델', '수집일', '경과(일)'], op.stale.slice(0, 20).map(function (s) { return [brandShort(s.brand) + ' ' + s.model_name, s.collected_at, s.age]; }), [2]) : ''));
+    return H.join('\n');
+  }
+  function reportHtml(rep) {
+    return '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>' + esc(rep.title + ' — Benchmarking Report') + '</title><style>body{margin:0;background:#fff;font-family:"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif}' +
+      '.rp{max-width:1000px;margin:0 auto;padding:24px 16px 48px}@media print{.rp{padding:0}}\n' + REPORT_CSS + '</style></head><body><article class="rp">' +
+      reportBodyHtml(rep) + '</article></body></html>';
   }
 
   return {
@@ -723,6 +1283,17 @@
     toggleCompare: toggleCompare, displayValue: displayValue, compareRows: compareRows, compareSheet: compareSheet,
     importTargets: importTargets, guessMapping: guessMapping, headerUnit: headerUnit, rowsToModels: rowsToModels, matchView: matchView, mergeModels: mergeModels,
     exportHeaders: exportHeaders, modelsToSheet: modelsToSheet, toCsv: toCsv, parseCsv: parseCsv,
-    emptyDb: emptyDb, restoreDb: restoreDb, activeScope: activeScope
+    emptyDb: emptyDb, restoreDb: restoreDb, activeScope: activeScope,
+    /* 2026-09-29 추가 */
+    SCORE_AXES: SCORE_AXES, REPORT_SECTIONS: REPORT_SECTIONS, FEEDBACK_TYPES: FEEDBACK_TYPES, FEEDBACK_STATUS: FEEDBACK_STATUS,
+    UPDATE_CYCLES: UPDATE_CYCLES, OPS_STEPS: OPS_STEPS, REPORT_CSS: REPORT_CSS,
+    cleanScore: cleanScore, scoreOf: scoreOf, powerPerTon: powerPerTon,
+    brandSummary: brandSummary, scoreComparison: scoreComparison, strengthsWeaknesses: strengthsWeaknesses, tagTrends: tagTrends,
+    whiteSpace: whiteSpace, buildInsight: buildInsight, insightPrompt: insightPrompt,
+    sectionName: sectionName, feedbackTargetLabel: feedbackTargetLabel, validateFeedback: validateFeedback, addFeedback: addFeedback,
+    setFeedbackStatus: setFeedbackStatus, feedbackSummary: feedbackSummary, stampTime: stampTime,
+    daysBetween: daysBetween, addDays: addDays, addMonths: addMonths, nextDue: nextDue, defaultOps: defaultOps, restoreOps: restoreOps,
+    staleModels: staleModels, opsStatus: opsStatus, toggleStep: toggleStep, completeCycle: completeCycle,
+    reportModels: reportModels, buildReport: buildReport, reportSheets: reportSheets, reportBodyHtml: reportBodyHtml, reportHtml: reportHtml, esc: esc
   };
 });

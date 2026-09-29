@@ -22,12 +22,16 @@ DB 에 연결하는 코드는 다음 단계에서 붙입니다.
 | `benchmark_scope` | Benchmark Scope (장비군 × 톤급 × 경쟁사 × 목적) | `data09-10.db` 의 `scopes[]` |
 | `benchmark_model` | 모델 1건 — 제출 기획서 6절 Schema 10개 블록의 필드 | `data09-10.db` 의 `models[]` |
 | `model_media` | 모델 이미지(View 별), 모델마다 여러 장 | `data09-10.db` 의 `models[].media[]` |
+| `design_feedback` | 전문가(디자이너) 피드백 — 리포트 항목·모델별 평가(1~5)·코멘트·작성자·시각·상태 (2026-09-29) | `data09-10.db` 의 `feedback[]` |
+| `ops_history` | 정기 업데이트 사이클 완료 이력 (2026-09-29) | `data09-10.db` 의 `ops.history[]` |
+
+2026-09-29 에 `workspace` 에 운영 루프 설정(`update_cycle`·`stale_days`·`last_update`·`ops_steps`)과 인사이트 요약 코멘트(`insight_note`…)가, `benchmark_model` 에 평가 점수 4칸(`score_exterior`·`score_cabin`·`score_cmf`·`score_service`, 1~5)이 붙었습니다. 이미 표를 만든 프로젝트도 `schema.sql` 을 다시 실행하면 칸이 더해지고 경쟁사 제약이 14개사로 바뀝니다.
 
 필드 이름은 도구의 이름(제출 기획서 6절 Schema)을 그대로 썼습니다.
 모델·Scope 의 `id` 는 표의 기본키 `id` 와 겹치므로 `model_id`('M0001')·`scope_id`('EXC-MED-006-TT')로 둡니다.
 이미지 한 장이 붙는 모델은 `model_ref`(모델 행의 기본키)로 가리킵니다.
 
-이 도구에는 변경 이력이나 로그 같은 기록성 데이터가 없습니다.
+기록성 데이터는 `design_feedback`·`ops_history` 두 표입니다. 쌓기만 하고 고치거나 지울 수 없습니다. 피드백은 반영 여부(`status`·`resolved_at`) 칸만 바꿀 수 있습니다(칸 단위 GRANT).
 
 ### 권한
 
@@ -35,7 +39,7 @@ DB 에 연결하는 코드는 다음 단계에서 붙입니다.
 - 모든 행은 만든 사람만 보고 고칠 수 있습니다(`owner_id = auth.uid()`). `owner_id` 는 로그인한 사용자로 자동으로 채워집니다.
 - 이미지는 본인 행이면서 붙는 모델도 본인 것이어야 등록됩니다. 남의 모델 번호를 알아내도 이미지를 끼워 넣을 수 없습니다.
 - 로그인하지 않은 사용자(anon)는 어떤 표도 읽거나 쓸 수 없습니다.
-- 장비군·톤급 조합(부록 C), 경쟁사 13개사(부록 B), Benchmark Purpose 7종, View 6종, 검증 상태 4종은 DB 제약(CHECK)으로 막습니다.
+- 장비군·톤급 조합(부록 C), 경쟁사 14개사(부록 B 13개사 + Mecalac), Benchmark Purpose 7종, View 6종, 검증 상태 4종은 DB 제약(CHECK)으로 막습니다.
 - 같은 브랜드·모델명, 같은 model_id·scope_id 가 두 번 들어가지 않도록 UNIQUE 제약을 두었습니다. 앱에서 upsert 할 때는 `onConflict` 를 표의 UNIQUE 조합(예: `owner_id,model_id`)으로 지정해야 합니다.
 - 모델을 지우면 그 모델의 이미지도 함께 지워집니다.
 
@@ -57,9 +61,9 @@ DB 에 연결하는 코드는 다음 단계에서 붙입니다.
 
 ## 확인 방법
 
-1. 왼쪽 메뉴 **Table Editor** 에 위 4개 표가 보이는지 확인합니다.
+1. 왼쪽 메뉴 **Table Editor** 에 위 6개 표가 보이는지 확인합니다.
 2. 각 표 이름 옆에 RLS 가 켜져 있는지(「RLS disabled」 경고가 없는지) 확인합니다.
-3. **Authentication → Policies** 에서 표마다 SELECT·INSERT·UPDATE·DELETE 정책 4개가 붙어 있는지 봅니다.
+3. **Authentication → Policies** 에서 처음 4개 표에는 SELECT·INSERT·UPDATE·DELETE 정책 4개, `design_feedback` 에는 SELECT·INSERT·UPDATE 3개, `ops_history` 에는 SELECT·INSERT 2개가 붙어 있는지 봅니다.
 4. SQL Editor 에서 아래를 실행해 함수 권한에 `anon` 이 없는지 봅니다.
 
 ```sql

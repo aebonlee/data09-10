@@ -116,8 +116,18 @@
     ['Wheel Loader', 'cat', '예시-WL950', 2024, 19200, 168, 3.5, 0, ['fq', 'cab', 'cmf'], true, ['후방 경사 후드', '넓은 글라스'], 16],
     ['Wheel Loader', 'volvo', '예시-WL150', 2025, 16800, 150, 3.2, 3, ['fq', 'cab'], true, ['후방 경사 후드', '슬림 필러'], 8],
     ['Wheel Loader', 'komatsu', '예시-WL380', 2023, 18900, 164, 3.4, 1, ['cmf'], false, ['각진 볼륨'], 27],
-    ['Wheel Loader', 'liebherr', '예시-WL526', 2024, 15500, 140, 2.9, 4, ['fq'], false, ['라운드 후드'], 14]
+    ['Wheel Loader', 'liebherr', '예시-WL526', 2024, 15500, 140, 2.9, 4, ['fq'], false, ['라운드 후드'], 14],
+    /* 2026-09-29 수강생 요청으로 경쟁사에 Mecalac 추가 — 휠형 굴착기 예시(가상) */
+    ['Excavator', 'mecalac', '예시-MW12', 2025, 11900, 85, 0.4, 5, ['fq', 'cab'], true, ['슬림 필러', '넓은 글라스'], 240]
   ];
+
+  /* 디자이너 평가 점수(1~5) 예시 — [Exterior, Cabin/HMI, CMF, Service/Safety], 모두 가상 값. null = 미평가 */
+  var SCORES = {
+    '예시-EX210': [4, 4, 3, 4], '예시-EX215': [3, 3, 3, 4], '예시-EX230': [4, 5, 4, 3], '예시-EX220': [3, 3, 3, 3],
+    '예시-EX220X': [5, 3, 3, 3], '예시-EX145': [3, 4, 3, 2], '예시-EX215C': [3, 2, 2, 3], '예시-EX215S': [4, 2, 3, 3],
+    '예시-MX035': [3, 3, 3, 4], '예시-MX030': null, '예시-WL950': [4, 4, 3, 4], '예시-WL150': [4, 5, 3, 3],
+    '예시-WL380': [3, 3, 3, 3], '예시-WL526': [3, 3, 2, 3], '예시-MW12': [4, 4, 3, 3]
+  };
 
   var FORM = { '저중심 카운터웨이트': 'Low & wide', '라운드 후드': 'Soft round', '각진 볼륨': 'Faceted', '슬림 필러': 'Light & open', '후방 경사 후드': 'Sloped rear', '후방 소선회': 'Compact tail' };
 
@@ -147,6 +157,9 @@
         entered_by: '예시 입력자', reviewer_note: '예시 데이터 — 실제 제품이 아닙니다',
         media: images(type, c, { views: r[8], wideCab: r[9] })
       };
+      var sc = SCORES[r[2]];
+      if (sc) L.SCORE_AXES.forEach(function (a, k) { m[a.key] = sc[k]; });
+      if (r[1] === 'mecalac') m.product_class = 'Wheeled';
       return m;
     });
     /* 필수 메타 점검 시연: 일부 칸을 비워 둡니다 */
@@ -163,6 +176,10 @@
     db.scopes = [sc.scope];
     db.activeScope = sc.scope.scope_id;
     db._sample = true;
+    /* 운영 루프 시연: 한 달 전 갱신 기록 1건 */
+    db.ops = L.restoreOps({ cycle: 'monthly', stale_days: 180,
+      last_update: L.toDateStr(new Date(base.getFullYear(), base.getMonth() - 1, base.getDate())),
+      history: [{ date: L.toDateStr(new Date(base.getFullYear(), base.getMonth() - 1, base.getDate())), cycle: 'monthly', steps_done: ['collect', 'qa'], note: '예시 — 1차 수집', models: 14 }] });
     return db;
   }
 

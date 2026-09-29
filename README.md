@@ -1,12 +1,12 @@
 # data09-10 · Design Benchmarking Agent
 
-Product Type·Tonnage·13개 경쟁사·목적으로 Scope를 정해 경쟁사 장비의 이미지·문서·제원을 모으고 Exterior/Cabin/CMF/Spec 기준으로 비교·리포트·정기 업데이트하는 디자인 벤치마킹 웹 에이전트
+Product Type·Tonnage·14개 경쟁사(부록 B 13개사 + Mecalac)·목적으로 Scope를 정해 경쟁사 장비의 이미지·문서·제원을 모으고 Exterior/Cabin/CMF/Spec 기준으로 비교·리포트·정기 업데이트하는 디자인 벤치마킹 웹 에이전트
 
 | 항목 | 내용 |
 |---|---|
 | 제출자 | 이동철 |
 | 과정 | 현장 데이터 수집·디지털화 전문가과정 1차수 (2026) |
-| 진행 단계 | 1단계 개발 완료 (2026-09-28) — https://aebonlee.github.io/data09-10/ |
+| 진행 단계 | 1단계 개발 완료 (2026-09-28), 추가 요청 반영 (2026-09-29 — Mecalac·Insight·Report·전문가 피드백·운영 루프) — https://aebonlee.github.io/data09-10/ |
 | 다음 개발 | 2단계 — 코랩 Spec Extractor(PDF → 제원)·VLM 태그 PoC, 카탈로그 질의(Insight) PoC, 팀 공용 저장소 결정, Moodboard·Trend Matrix |
 
 ## 이 저장소 이용 안내
@@ -23,7 +23,7 @@ Product Type·Tonnage·13개 경쟁사·목적으로 Scope를 정해 경쟁사 �
 1. **파일로 바로 열기** — 이 폴더의 `index.html` 을 더블클릭해 크롬·엣지로 엽니다. 인터넷이 없어도 동작합니다(엑셀 라이브러리도 `vendor/` 에 들어 있습니다).
 2. **간이 서버로 열기** — 폴더에서 `python3 -m http.server 8000` 을 실행하고 브라우저에서 `http://localhost:8000` 을 엽니다.
 
-처음 열면 데이터가 비어 있습니다. 「06 가져오기·내보내기」의 **「예시 데이터 불러오기」** 를 누르면 시연용 가상 모델 14건과 Scope 1개가 들어가고, 화면 위에 「예시 데이터」 안내 띠가 표시됩니다.
+처음 열면 데이터가 비어 있습니다. 「06 가져오기·내보내기」의 **「예시 데이터 불러오기」** 를 누르면 시연용 가상 모델 15건(평가 점수 포함)·Scope 1개·운영 루프 이력 1건이 들어가고, 화면 위에 「예시 데이터」 안내 띠가 표시됩니다.
 
 - 예시 데이터는 **모두 가상**입니다. 모델명은 「예시-」로 시작하고, 제원·색·출처(example.com)·이미지(도형 SVG)는 시연용으로 만든 값입니다. 브랜드 칸만 부록 B 경쟁사 이름을 빌렸고, 그 회사의 실제 제품 정보가 아닙니다.
 - 데이터는 **이 브라우저(localStorage)에만** 저장됩니다. 이미지는 긴 변 800px(설정 가능)로 줄여 보관하며, 브라우저 한도(대개 5MB 안팎)가 있으니 「JSON 백업(이미지 포함)」으로 나눠 보관하세요.
@@ -33,11 +33,15 @@ Product Type·Tonnage·13개 경쟁사·목적으로 Scope를 정해 경쟁사 �
 
 ### 쓰는 순서
 
-1. **01 Scope Setup** — Product Type → Tonnage(부록 C) → 경쟁사(부록 B 13개사) → Purpose 를 고르고 「범위 확정」. Scope ID 가 만들어지고 위쪽 칩에 표시됩니다.
+1. **01 Scope Setup** — Product Type → Tonnage(부록 C) → 경쟁사(부록 B 13개사 + Mecalac) → Purpose 를 고르고 「범위 확정」. Scope ID 가 만들어지고 위쪽 칩에 표시됩니다.
 2. **05 자료 등록** 또는 **06 가져오기** — 모델을 한 건씩 넣거나, 기존 엑셀 정리표를 열 연결로 한꺼번에 넣습니다.
 3. **02 Status Dashboard** — 브랜드 × Tonnage 보유 현황, View 보유 현황, 필수 메타 누락을 확인하고 「보완」합니다.
 4. **03 Card Gallery** — 필터로 좁혀 비교할 모델을 2~4개 담습니다.
 5. **04 Side-by-Side** — 같은 View 끼리 이미지를 맞대고 비교표를 Excel·인쇄용 PDF 로 내보냅니다.
+6. **07 Insight** — 브랜드별 요약·평가 점수 비교·강약점·Design Tag 트렌드·White Space 를 봅니다. 평가 점수(1~5)는 이 화면 아래 「빠른 입력」이나 자료 등록에서 넣습니다. 요약 코멘트는 직접 쓰거나 AI 요약(프롬프트 복사 → 답 붙여 넣기)을 저장합니다.
+7. **08 Benchmarking Report** — 9개 항목 보고서를 인쇄·PDF 저장하거나 xlsx·HTML 로 내려받습니다.
+8. **09 전문가 피드백** — 리포트 항목·모델별로 평가(1~5)와 코멘트를 남기고, 반영하면 「반영됨」으로 바꿉니다.
+9. **10 운영 루프** — 업데이트 주기를 정하고 한 바퀴 단계를 체크한 뒤 「이번 사이클 완료」를 누릅니다. 예정일이 지나거나 오래된 자료가 있으면 왼쪽 메뉴에 표시됩니다.
 
 ## 1단계 구현 범위
 
@@ -45,7 +49,7 @@ Product Type·Tonnage·13개 경쟁사·목적으로 Scope를 정해 경쟁사 �
 
 | 기능 (기획서 5장) | 상태 | 1단계에서 한 것 / 남은 것 |
 |---|---|---|
-| Scope Setup | 완료 | Excavator 6단계·Wheel Loader 5단계 조건부 톤급, 13개사 Multi-select(전체 선택·해제, 이 범위 보유 건수 표시), Purpose 7종, Scope ID 생성·저장·재적용·해제. ID 형식은 가정(기획서 10장 6번) |
+| Scope Setup | 완료 | Excavator 6단계·Wheel Loader 5단계 조건부 톤급, 14개사 Multi-select(2026-09-29 Mecalac 추가)(전체 선택·해제, 이 범위 보유 건수 표시), Purpose 7종, Scope ID 생성·저장·재적용·해제. ID 형식은 가정(기획서 10장 6번) |
 | 자료 등록 | 완료 | 6절 Schema 10개 블록 전 필드, 제원(FACT)과 관찰(OBSERVATION) 구분, 이미지 파일 또는 경로 + View 지정(18절 5종 + 기타), 단위 변환(t→kg, hp→kW), 운전중량으로 톤급 자동, 중복 모델 차단, schema_version 기록 |
 | 엑셀 일괄 가져오기 | 완료 | xlsx·csv, 시트·머리글 행 선택, 열 → Schema 자동 연결 후 수정, 머리글 단위 인식, 미리보기, 같은 브랜드+모델명은 갱신 |
 | 필수 메타 점검 | 완료 | brand·model·category·collected_at·source URL·image 누락 표시(대시보드·갤러리·상세), 톤급과 운전중량 불일치 경고 |
@@ -54,24 +58,30 @@ Product Type·Tonnage·13개 경쟁사·목적으로 Scope를 정해 경쟁사 �
 | Side-by-Side | 완료 | 2~4개, 같은 View 끼리 이미지 비교, 블록별 비교표(차이 행 강조·빈 항목 숨기기·차이만 보기) |
 | Detail / Evidence | 완료 | 원본 이미지(View 전환), 제원, 관찰 블록(입력 출처 표시), Source URL·수집일·신뢰도, 입력자·검증 상태 |
 | Report 내보내기 | 완료 | 비교표 Excel(비교표·출처·근거 시트), 인쇄용 PDF(브라우저 인쇄), CSV. 전체 KB 는 Excel·CSV·JSON 백업 |
+| Insight 페이지 | 완료 (09-29) | 브랜드별 요약, 평가 점수 4축 비교(축 평균 대비), 강·약점 자동 추출, Design Tag 트렌드, White Space, 요약 코멘트(AI 요약 반자동) |
+| Benchmarking Report | 완료 (09-29) | 9개 항목 보고서 화면, 인쇄·PDF, xlsx(8개 시트), HTML 한 파일. PPTX 는 3단계 |
+| 전문가(디자이너) 피드백 | 완료 (09-29) | 리포트 항목·모델별 평가·분류·코멘트·작성자·시각 기록, 반영 상태. 리포트 각 항목에 피드백 버튼 |
+| 정기 업데이트 · 운영 루프 | 일부 (09-29) | 주기·마지막 갱신일·다음 예정일, 오래된 자료 경고, 사이클 7단계 체크·이력. 자동 재수집·신규 모델 감지는 3단계 |
 | Moodboard · Trend Matrix | 다음 단계 | 2단계 |
 | VLM 분석 · Spec Extractor | 다음 단계 | 2단계(코랩 PoC). 1단계는 결과를 붙일 자리(관찰 입력 출처 「AI 관찰」, confidence, extracted_text, 검증 상태)만 마련 |
 | Hybrid 검색·Insight Chat | 다음 단계 | 2단계 PoC(Dify·NotebookLM) → 3단계 |
-| 자동 수집 · 정기 업데이트 | 다음 단계 | 3단계 |
-| Designer Validation → Tuning, PPTX 자동 생성, 권한·감사 로그 | 다음 단계 | 3단계 |
+| 자동 수집 · 자동 재수집 | 다음 단계 | 3단계 |
+| Prompt/Schema Tuning 버전 관리, PPTX 자동 생성, 권한·감사 로그 | 다음 단계 | 3단계 (피드백 분류·운영 루프 보정 메모로 기록만) |
 
 개발 기록: [docs/개발일지.md](docs/개발일지.md)
 
 ## 문서
 
 - [프로젝트 기획서 (Markdown)](docs/01_프로젝트_기획서.md)
-- [프로젝트 기획서 (Word, docx)](docs/01_프로젝트_기획서.docx)
+- [프로젝트 기획서 (Word, docx)](docs/01_프로젝트_기획서.docx) — v0.1 초안 기준(v0.2 개정은 Markdown 판)
 - [패들릿 제출 원문](docs/source/패들릿_제출_원문.md)
+- [2026-09-29 추가 요청 원문](docs/source/2026-09-29_패들릿_추가요청.md)
 
 ## 제출 자료 (`docs/source/`)
 
 - `01___________Design_Benchmarking_Agent__________v3_docx.pdf`
 - `02_Design_Benchmarking_Agent_Web_Prototype.zip`
+- `2026-09-29_AgentProto_index.html` — 2026-09-29 재업로드한 End-to-End Proto Web(위 zip 의 `index.html` 과 같은 파일)
 
 ## 진행 순서
 
