@@ -334,3 +334,10 @@ pre.mail-body { white-space: pre-wrap; word-break: keep-all; overflow-wrap: brea
 @media print {
   .task-b .paper { border: none; padding: 0; }
 }
+
+/* 2026-09-29 오후 늦게 — 평가 8기준 표 · AI 연결 설정 */
+.blocks > .span-all { grid-column: 1 / -1; }
+.eval-table th[scope="row"] { min-width: 220px; }
+.eval-table td select { min-width: 84px; }
+.eval-table td input { min-width: 220px; width: 100%; }
+.ai-send { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }

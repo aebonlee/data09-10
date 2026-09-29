@@ -352,13 +352,95 @@ test('.docx 부품: XML 3개, 문단 짝이 맞고 이스케이프, zip 으로 �
   const zip = X.CFB.write(cfb, { fileType: 'zip', type: 'buffer' });
   assert.equal(Buffer.from(zip).subarray(0, 2).toString(), 'PK');
 });
-test('엑셀 시트 5개: 요약 · 업무항목 · 업무그룹 · 근거메일 · 이전계획대비', () => {
+test('엑셀 시트: 주간은 요약 · 주간보고표 · 업무항목 · 업무그룹 · 근거메일 · 이전계획대비, 월간은 주간보고표 없음', () => {
   const sh = L.reportSheets(rep, items, mails, tasks);
-  assert.deepEqual(sh.map((s) => s.name), ['요약', '업무항목', '업무그룹', '근거메일', '이전계획대비']);
-  assert.equal(sh[1].aoa.length, items.length + 1);
-  assert.equal(sh[3].aoa.length, mails.length + 1);
-  assert.equal(sh[4].aoa[5][2], '이월');
-  assert.equal(sh[4].aoa[5][3], '확정');
+  assert.deepEqual(sh.map((s) => s.name), ['요약', '주간보고표', '업무항목', '업무그룹', '근거메일', '이전계획대비']);
+  assert.equal(sh[2].aoa.length, items.length + 1);
+  assert.equal(sh[4].aoa.length, mails.length + 1);
+  assert.equal(sh[5].aoa[5][2], '이월');
+  assert.equal(sh[5].aoa[5][3], '확정');
+  const mo = L.buildReport({ type: 'monthly', period: L.periodFor('monthly', '2026-09-25'), mails, items, tasks });
+  assert.ok(!L.reportSheets(mo, items, mails, tasks).some((x) => x.name === '주간보고표'));
+});
+
+console.log('[과제 B] 주간보고 양식 표 (2026-09-29 오후 늦게 — 양식 샘플 구조)');
+test('개조식 문체: 「~했습니다」「~예정입니다」「~부탁드립니다」「~이 필요합니다」 → 명사로 끝남', () => {
+  const cases = [
+    ['오늘 1차 시안 검토 회의를 마쳤습니다.', '오늘 1차 시안 검토 회의 완료'],
+    ['부스 렌더링 이미지 5컷을 제출했습니다.', '부스 렌더링 이미지 5컷 제출'],
+    ['차주에는 B안 기준으로 3D 모델링 업데이트를 진행할 예정입니다(10/2까지).', '차주에는 B안 기준으로 3D 모델링 업데이트 진행 예정 (10/2까지)'],
+    ['보완 요청이 있으면 금요일까지 반영하겠습니다.', '보완 요청이 있으면 금요일까지 반영 예정'],
+    ['모델링 일정을 지키기 위해 9/30까지 회신 부탁드립니다.', '모델링 일정 지키기 위해 9/30까지 회신 요청'],
+    ['운송 일정과 충돌 가능성이 있어 확인이 필요합니다.', '운송 일정과 충돌 가능성이 있어 확인 필요'],
+    ['지난주 요청드린 조작부 치수 자료 회신이 지연되고 있습니다.', '지난주 요청드린 조작부 치수 자료 회신이 지연 중'],
+    ['팀장님, B안 기준으로 3D 모델링 업데이트에 착수했습니다.', 'B안 기준으로 3D 모델링 업데이트에 착수'],
+    ['금형 수정에 따른 양산 일정 확인 필요', '금형 수정에 따른 양산 일정 확인 필요'],   // 이미 개조식이면 그대로
+    ['샘플을 받았습니다.', '샘플 받음'],
+    ['', '']
+  ];
+  cases.forEach(([a, b]) => assert.equal(L.boardStyle(a), b, a));
+});
+test('양식 기간 표기: 금주·차주 평일(월~금), 점 날짜', () => {
+  assert.deepEqual(L.workdayRange(L.periodFor('weekly', '2026-09-30', 1)), { start: '2026-09-28', end: '2026-10-02', label: '2026.09.28 ~ 2026.10.02' });
+  assert.equal(L.workdayRange(L.periodFor('weekly', '2026-09-30', 0)).label, '2026.09.28 ~ 2026.10.02');   // 일요일 시작 주도 평일만
+  assert.equal(L.workdayRange(null), null);
+});
+const repB = L.buildReport({ type: 'weekly', period: P, mails, items, tasks, carry: carryWithFinal, projects: S.projects, now: '2026-09-27 18:00' });
+const board = L.boardOf(repB);
+test('양식 표: 열 = Business Group · 프로젝트명 · 금주 실적(기간) · 차주 계획(기간), 행 = 설정한 프로젝트 순서', () => {
+  assert.deepEqual(board.head, ['Business Group', '프로젝트명', '금주 실적 (2026.09.21 ~ 2026.09.25)', '차주 계획 (2026.09.28 ~ 2026.10.02)']);
+  assert.deepEqual(board.rows.map((r) => r.project), ['캡 인테리어 개선', 'CMF 샘플 평가', '전시회 준비', '디자인 가이드', '기타']);
+  assert.deepEqual(board.rows.slice(0, 3).map((r) => r.group), ['건설기계(가상)', '건설기계(가상)', '전시·홍보(가상)']);
+});
+test('양식 칸: 진행 내용 · 결과물 배포일 · 이슈 사항 · 디자인 결과물 이미지 / 실행 예정 업무 · 일정 · 이슈 사항', () => {
+  const expo = board.rows.find((r) => r.project === '전시회 준비');
+  const perf = L.boardCellLines(expo, 'perf');
+  assert.deepEqual(perf.filter((x) => x.startsWith('- ')).map((x) => x.slice(2).split(':')[0]), L.BOARD_LABELS.perf);
+  assert.equal(perf[0], '- 진행 내용: 부스 렌더링 이미지 5컷 제출');
+  assert.ok(perf.includes('- 디자인 결과물 이미지: 첨부 booth_front.png (보고서에 넣어 주세요)'));   // 근거 메일의 이미지 첨부 이름
+  assert.ok(perf.some((x) => x.includes('의사결정 필요')));
+  const plan = L.boardCellLines(expo, 'plan');
+  assert.deepEqual(plan.filter((x) => x.startsWith('- ')).map((x) => x.slice(2).split(':')[0]), L.BOARD_LABELS.plan);
+  const cab = board.rows[0];
+  assert.equal(L.boardCellLines(cab, 'plan').find((x) => x.startsWith('- 일정')), '- 일정: 2026-09-30 ~ 2026-10-02');
+  assert.ok(L.boardCellLines(cab, 'perf').includes('- 디자인 결과물 이미지: (여기에 디자인 결과물 이미지 삽입)'));
+  const guide = board.rows.find((r) => r.project === '디자인 가이드');                               // 이월만 있는 프로젝트도 행이 생김
+  assert.deepEqual(guide.plan.issues, ['이월: 사내 디자인 가이드 개정안 작성']);
+  const cmf = board.rows.find((r) => r.project === 'CMF 샘플 평가');
+  assert.equal(cmf.perf.release, '2026-09-23 ~ 2026-09-26');
+});
+test('문체 설정 「메일 문장 그대로」, 화면·Word·docx 에 양식 표, 월간에는 없음', () => {
+  const orig = L.weeklyBoard(repB, S.projects, mails, { style: 'original' });
+  assert.equal(orig.rows.find((r) => r.project === '전시회 준비').perf.progress[0], '부스 렌더링 이미지 5컷을 제출했습니다.');
+  const html = L.reportHtml(repB);
+  assert.ok(html.indexOf('data-section="board"') > html.indexOf('data-section="summary"') && html.indexOf('data-section="board"') < html.indexOf('data-section="performance"'));
+  assert.ok(html.includes('<th>Business Group</th>') && html.includes('- 결과물 배포일:'));
+  const doc = L.docxParts(repB)['word/document.xml'];
+  assert.ok(doc.includes('Business Group') && doc.includes('- 실행 예정 업무:'));
+  assert.equal((doc.match(/<w:p>|<w:p /g) || []).length, (doc.match(/<\/w:p>/g) || []).length);
+  const mo = L.buildReport({ type: 'monthly', period: L.periodFor('monthly', '2026-09-25'), mails, items, tasks, projects: S.projects });
+  assert.ok(!L.reportHtml(mo).includes('data-section="board"'));
+  assert.equal(L.restoreState({ settings: { boardStyle: 'original' } }).settings.boardStyle, 'original');
+  assert.equal(L.cleanProjects([{ name: 'A', keywords: 'x', group: ' 산업차량 ' }])[0].group, '산업차량');
+});
+
+console.log('[과제 B] 클래식 Outlook 폴더 내보내기(tools/outlook) 형식');
+test('Export-OutlookMail.ps1 형식의 .eml: 나뉜 제목, 이름만 받는 사람, 시간대, 회신 흐름, 이름·크기만 담은 첨부', () => {
+  const m = L.parseEml(new Uint8Array(readFileSync(path.join(ROOT, 'test/fixtures/outlook-export.eml'))), { file: 'x.eml' });
+  assert.deepEqual(m.warnings, []);
+  assert.equal(m.subject, 'RE: [캡 인테리어 개선] 2차 시안 검토 결과 공유 및 조작부 모델링 일정 안내');
+  assert.deepEqual(m.from, { name: '디자이너A(가상)', email: 'designer.a@example.com' });
+  assert.deepEqual(m.to.map((a) => a.name), ['팀장B(가상)', '설계담당(가상)']);
+  assert.deepEqual([m.day, m.time, m.date], ['2026-09-29', '23:40', '2026-09-29T14:40:00.000Z']);
+  assert.deepEqual([m.messageId, m.inReplyTo, m.references.length], ['export-0002@example.com', 'export-0001@example.com', 2]);
+  assert.deepEqual(m.attachments.map((a) => [a.name, a.size]), [['캡_2차시안_렌더링.png', 524288], ['조작부 치수표.xlsx', 20480]]);
+  assert.ok(!m.main.includes('인용문'));
+  // 스크립트가 같은 머리글 모양을 쓰는지(형식이 갈라지지 않게)
+  const ps = readFileSync(path.join(ROOT, 'tools/outlook/Export-OutlookMail.ps1'), 'utf8');
+  for (const k of ["Content-Disposition: attachment; filename*=UTF-8''", '; size=', "'=?UTF-8?B?'", 'Content-Type: multipart/mixed; boundary="', 'Content-Transfer-Encoding: base64', 'X-Exported-By: data09-10 Export-OutlookMail.ps1 (read-only)'])
+    assert.ok(ps.includes(k), k);
+  assert.ok(ps.charCodeAt(0) === 0xFEFF);                                               // BOM — Windows PowerShell 5.1 한글
+  for (const bad of ['.Delete(', '.Move(', '.Save()', 'UnRead', '.Send(']) assert.ok(!ps.includes(bad), '읽기 전용: ' + bad);
 });
 test('저장 형태: 복원 · 승인 이력 → 다음 기간 이전 계획', () => {
   const s = L.restoreState({ settings: { type: 'monthly', refDay: '2026-09-01' }, items: [{ id: 'x', category: '잡담', evidence: [] }, { id: 'y', category: '계획', evidence: ['E1'] }], taskProject: { k: 'A' }, approved: '2026-09-27 18:00' });

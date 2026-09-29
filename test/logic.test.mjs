@@ -166,7 +166,7 @@ test('statusMatrix: Scope 브랜드만 → 6행', () => {
 test('filterModels: Scope 적용 시 Medium 6개사 → 6건', () => {
   assert.equal(L.filterModels(db.models, { scope: db.scopes[0] }).length, 6);
   assert.equal(L.filterModels(db.models, { view: 'Rear' }).length, 2); // CAT·Volvo 예시만 Rear
-  assert.equal(L.filterModels(db.models, { year_from: 2025 }).length, 4); // Volvo EX230·Bobcat EX145·Volvo WL150·Mecalac MW12
+  assert.equal(L.filterModels(db.models, { year_from: 2025 }).length, 3); // Volvo EX230·Bobcat EX145·Volvo WL150 (Mecalac MW12 는 20년 넘은 자료 시연으로 2005년)
   assert.equal(L.filterModels(db.models, { q: '넓은 글라스' }).length, 5);
   assert.equal(L.filterModels(db.models, { incomplete: true }).length, 3);
 });
@@ -263,32 +263,61 @@ test('restoreDb: 깨진 값 무시, 비교함은 있는 모델만', () => {
 });
 
 console.log('평가 점수·인사이트 (2026-09-29)');
-test('cleanScore: 0~5 정수만(2026-09-29 오후 답변), 나머지는 빈 값 · 예전 1~5 값은 그대로', () => {
+test('평가 기준 8개·권장 비중(합 100%)·5점 Scale — 수강생 평가 기준 자료 그대로', () => {
+  assert.deepEqual(L.SCORE_AXES.map(a => a.name), ['Exterior Proportion & Stance', 'Exterior Form & Surface Quality', 'Exterior CMF & Brand Expression',
+    'Interior Architecture & Styling', 'Interior CMF & Perceived Quality', 'Ergonomics & Operator Usability', 'HMI & Control Integration', 'Design Identity & Differentiation']);
+  assert.deepEqual(L.SCORE_AXES.map(a => a.weight), [15, 15, 10, 15, 10, 15, 10, 10]);
+  assert.equal(L.SCORE_AXES.reduce((n, a) => n + a.weight, 0), 100);
+  assert.deepEqual(L.SCORE_AXES.map(a => a.checks.length), [4, 4, 4, 4, 4, 5, 4, 5]);
+  assert.deepEqual(L.SCORE_LEVELS.map(l => l.value + l.label), ['1개선 필요', '2기본 수준', '3경쟁 평균', '4우수', '5Benchmark 수준']);
+  assert.deepEqual(L.SCORE_OPTIONS.map(o => o.value), ['1', '2', '3', '4', '5']);
+  // 기준마다 디자이너·AI·근거 칸 3개, 평가 블록에만
+  assert.equal(L.fieldsOf('evaluation').length, 24);
+  assert.equal(new Set(L.FIELDS.map(f => f.key)).size, L.FIELDS.length);
+});
+test('cleanScore: 1~5 정수만(평가 기준 자료 5점 Scale), 0·6·빈칸은 빈 값', () => {
   assert.equal(L.cleanScore('4'), 4);
   assert.equal(L.cleanScore('4점'), 4);
   assert.equal(L.cleanScore(3.6), 4);
-  assert.equal(L.cleanScore(0), 0);            // 0 도 점수
-  assert.equal(L.cleanScore('0'), 0);
-  assert.equal(L.cleanScore(-1), '');
+  assert.equal(L.cleanScore(1), 1);
+  assert.equal(L.cleanScore(0), '');          // 자료의 척도는 1부터
   assert.equal(L.cleanScore(6), '');
-  assert.equal(L.cleanScore(null), '');        // 빈칸(평가 안 함)은 0 이 아니다
-  assert.deepEqual(L.SCORE_OPTIONS, ['0', '1', '2', '3', '4', '5']);
-  assert.equal(L.cleanModel({ brand: 'x', model_name: 'y', score_cmf: 1 }).score_cmf, 1); // 예전 1~5 데이터 호환
-  assert.equal(L.displayValue({ score_cabin: 0 }, L.fieldByKey('score_cabin')), '0 / 5');
-  assert.equal(L.fieldByKey('score_cmf').label, 'CMF 평가(0~5)');
+  assert.equal(L.cleanScore(null), '');
   assert.equal(L.cleanScore(''), '');
-  assert.equal(L.cleanModel({ brand: 'x', model_name: 'y', score_cmf: '7' }).score_cmf, '');
-  assert.equal(L.displayValue({ score_cabin: 5 }, L.fieldByKey('score_cabin')), '5 / 5');
+  assert.equal(L.cleanScore('점'), '');       // 숫자 없는 글자는 0 이 아니라 빈 값
+  assert.equal(L.cleanModel({ brand: 'x', model_name: 'y', score_hmi: '7' }).score_hmi, '');
+  assert.equal(L.displayValue({ score_hmi: 5 }, L.fieldByKey('score_hmi')), '5 / 5 (Benchmark 수준)');
+  assert.equal(L.displayValue({ ai_form: 3 }, L.fieldByKey('ai_form')), '3 / 5 (경쟁 평균)');
 });
-// 예시 Scope(EXC-MED-006-XT) 6개사 점수 — [Ext, Cabin, CMF, Service]
-// CAT 4434 · Komatsu 3334 · Volvo 4543 · Hitachi 3333 · JCB 5333 · Bobcat 3432
+test('가중 점수: 평가한 기준의 비중으로 다시 나눔, 최종 = 디자이너 → 없으면 AI', () => {
+  const z = L.cleanModel({ brand: 'JCB', model_name: 'z', score_proportion: 5, score_hmi: 2, ai_hmi: 5, ai_identity: 4, note_identity: '근거' });
+  const e = L.modelEvaluations([z])[0];
+  // (15×5 + 10×2 + 10×4) / (15+10+10) = 135/35 = 3.857…
+  assert.deepEqual([e.avg, e.coverage, e.rated, e.aiOnly, e.complete], [3.86, 35, 3, 1, false]);
+  assert.deepEqual([e.source.score_hmi, e.source.score_identity, e.source.score_form], ['designer', 'ai', '']);
+  assert.equal(e.notes.score_identity, '근거');
+  assert.deepEqual(L.weightedScore({}), { value: null, coverage: 0 });
+  const full = {}; L.SCORE_AXES.forEach(a => { full[a.key] = 3; });
+  assert.deepEqual(L.weightedScore(full), { value: 3, coverage: 100 });
+});
+test('예전 4축 점수(v0.3)는 legacy_scores 로 옮기고 계산에 쓰지 않음', () => {
+  const m = L.cleanModel({ brand: 'JCB', model_name: 'old', score_exterior: 4, score_cmf: 0, score_cabin: '' });
+  assert.deepEqual(m.legacy_scores, { exterior: 4, cmf: 0 });
+  assert.ok(!('score_exterior' in m) && !('score_cabin' in m));
+  assert.equal(L.modelEvaluations([m])[0].avg, null);
+  assert.deepEqual(L.cleanModel(m).legacy_scores, { exterior: 4, cmf: 0 });   // 다시 정리해도 그대로
+  assert.equal(L.restoreDb({ models: [{ id: 'M0001', brand: 'JCB', model_name: 'a', score_service: 3 }] }).models[0].legacy_scores.service, 3);
+});
+// 예시 Scope(EXC-MED-006-XT) 6개사 8기준 점수 — 비중 15·15·10·15·10·15·10·10
+// CAT 44344344=3.75 · Komatsu 33333433=3.15 · Volvo 44454544=4.3 · Hitachi 3333 2 3 - 3=260/90=2.89 · JCB 54333334=3.55 · Bobcat 33443233=3.1
 const scoped = L.filterModels(db.models, { scope: db.scopes[0] });
 const ins = L.buildInsight(scoped);
 test('brandSummary: 브랜드 6개, 평균·출력대비중량', () => {
   assert.equal(ins.summary.length, 6);
   const volvo = ins.summary.find(r => r.brand === 'Volvo CE');
-  assert.equal(volvo.overall, 4);           // (4+5+4+3)/4
-  assert.equal(volvo.scores.score_cabin, 5);
+  assert.equal(volvo.overall, 4.3);         // (60+60+40+75+40+75+40+40)/100
+  assert.equal(volvo.scores.score_int_arch, 5);
+  assert.equal(ins.summary.find(r => r.short === 'Hitachi').overall, 2.89); // C7 미평가 → 260 / 90
   const jcb = ins.summary.find(r => r.brand === 'JCB');
   assert.equal(jcb.pwr, 5.89);              // 129 kW / 21.9 t
   assert.deepEqual(jcb.weight, { min: 21.9, max: 21.9 });
@@ -296,18 +325,20 @@ test('brandSummary: 브랜드 6개, 평균·출력대비중량', () => {
 });
 test('scoreComparison: 축 평균은 모델 단위 평균', () => {
   const ax = Object.fromEntries(ins.scores.axes.map(a => [a.key, a.avg]));
-  assert.deepEqual(ax, { score_exterior: 3.67, score_cabin: 3.67, score_cmf: 3.17, score_service: 3.17 }); // 22/6, 22/6, 19/6, 19/6
+  assert.deepEqual(ax, { score_proportion: 3.67, score_form: 3.5, score_ext_cmf: 3.33, score_int_arch: 3.67, score_int_cmf: 3.17, score_ergonomics: 3.33, score_hmi: 3.4, score_identity: 3.5 });
+  assert.equal(ins.scores.axes.find(a => a.key === 'score_hmi').n, 5);   // Hitachi 는 C7 미평가
   const jcb = ins.scores.rows.find(r => r.brand === 'JCB');
-  assert.equal(jcb.diff.score_exterior, 1.33);
+  assert.equal(jcb.diff.score_proportion, 1.33);
   assert.equal(ins.scores.axes[0].best.brand, 'JCB');
 });
 test('strengthsWeaknesses: ±0.5점 기준', () => {
   const by = Object.fromEntries(ins.sw.map(r => [r.short, r]));
-  assert.deepEqual(by['JCB'].strengths.map(x => x.key), ['score_exterior']);
-  assert.deepEqual(by['Volvo CE'].strengths.map(x => x.key), ['score_cabin', 'score_cmf']); // +1.33, +0.83 (차이 큰 순)
-  assert.deepEqual(by['Bobcat'].weaknesses.map(x => x.key), ['score_service', 'score_exterior']); // 2 − 3.17, 3 − 3.67
-  assert.deepEqual(by['Hitachi'].weaknesses.map(x => x.key).sort(), ['score_cabin', 'score_exterior']);
+  assert.deepEqual(by['JCB'].strengths.map(x => x.key), ['score_proportion', 'score_form', 'score_identity']); // +1.33, +0.5, +0.5
+  assert.deepEqual(by['JCB'].weaknesses.map(x => x.key), ['score_int_arch']);                                // 3 − 3.67
+  assert.deepEqual(by['Bobcat'].weaknesses.map(x => x.key), ['score_ergonomics', 'score_proportion', 'score_form', 'score_identity']); // 2 − 3.33, 3 − 3.67, 3 − 3.5 ×2
+  assert.deepEqual(by['Hitachi'].weaknesses.map(x => x.key).sort(), ['score_form', 'score_identity', 'score_int_arch', 'score_int_cmf', 'score_proportion']);
   assert.equal(by['CAT'].weaknesses.length, 0);
+  assert.ok(by['JCB'].strengths[0].text.startsWith('C1 Exterior Proportion & Stance 5점'));
 });
 test('strengthsWeaknesses: 출력 대비 중량 ±10% 이면 제원 강·약점', () => {
   const two = [
@@ -323,12 +354,12 @@ test('tagTrends: 「넓은 글라스」 3건 50%, 최근 2개 연식 3건', () =
   assert.deepEqual(ins.tags[0], { tag: '넓은 글라스', count: 3, share: 50, brands: ['CAT', 'Volvo CE', 'Bobcat'], recent: 3 });
 });
 test('whiteSpace·headline', () => {
-  assert.equal(ins.whitespace[0].name, 'CMF');       // 3.17 동점이면 축 순서
-  assert.equal(ins.whitespace[0].open, false);       // Volvo 4점
-  const brandLine = ins.headline.find(x => x.startsWith('평가 평균이 가장 높은 브랜드'));
-  assert.ok(brandLine.includes('Volvo CE(4점)') && brandLine.includes('Bobcat(3점)'));
-  assert.equal(ins.headline[0], '디자인 평가: 모델 6건 중 6건 평가(4축 모두 입력 6건), 척도 0~5점.');
-  const ws = L.whiteSpace(L.scoreComparison([L.cleanModel({ brand: 'JCB', model_name: 'a', score_cmf: 3 })]));
+  assert.equal(ins.whitespace[0].name, 'C5 Interior CMF & Perceived Quality'); // 3.17 가장 낮음
+  assert.equal(ins.whitespace[0].open, false);       // CAT·Volvo 4점
+  const brandLine = ins.headline.find(x => x.startsWith('가중 점수 평균이 가장 높은 브랜드'));
+  assert.ok(brandLine.includes('Volvo CE(4.3점)') && brandLine.includes('Hitachi(2.89점)'));
+  assert.equal(ins.headline[0], '디자인 평가: 모델 6건 중 6건 평가(8기준 모두 입력 5건), 척도 1~5점 · 가중 점수(비중 합 100%).');
+  const ws = L.whiteSpace(L.scoreComparison([L.cleanModel({ brand: 'JCB', model_name: 'a', score_int_cmf: 3 })]));
   assert.equal(ws[0].open, true);                    // 최고도 4점 미만
 });
 test('점수 없는 자료면 안내 문장, 빈 목록도 오류 없음', () => {
@@ -340,8 +371,27 @@ test('점수 없는 자료면 안내 문장, 빈 목록도 오류 없음', () =>
 test('insightPrompt: 수치·태그만, 출처 URL 은 넣지 않음', () => {
   const p = L.insightPrompt(ins, db.scopes[0]);
   assert.ok(p.includes('EXC-MED-006-XT'));
-  assert.ok(p.includes('- Volvo CE (1건): Exterior 4, Cabin 5, CMF 4, Service 3'));
+  assert.ok(p.includes('- Volvo CE (1건): C1 4, C2 4, C3 4, C4 5, C5 4, C6 5, C7 4, C8 4 · 가중 4.3'));
+  assert.ok(p.includes('C4 실내 구성(15%) 3.67'));
   assert.ok(!p.includes('example.com'));
+});
+test('AI 1차 평가: 프롬프트(관찰 기록만, 제원은 맥락), 답 읽기(범위 밖·빈 점수 거름), 디자이너 점수는 그대로', () => {
+  const m = L.cleanModel({ brand: 'Volvo CE', model_name: '예시-EX230', equipment_type: 'Excavator', operating_weight: 23500, visibility: '전방·측방 양호',
+    source_url: 'https://example.com/x', design_tags: ['슬림 필러'], score_form: 2 });
+  const p = L.evalPrompt(m);
+  assert.ok(p.includes('Visibility: 전방·측방 양호') && p.includes('운전중량 23,500 kg') && p.includes('슬림 필러'));
+  assert.ok(!p.includes('example.com'));                                   // 출처 URL 은 보내지 않음
+  assert.ok(p.includes('ergonomics — C6 Ergonomics & Operator Usability (비중 15%)'));
+  const ans = '```json\n{"proportion":{"score":4,"confidence":0.7,"evidence":"비례 안정"},"form":{"score":5,"evidence":"x"},"ext_cmf":{"score":null,"evidence":"관찰 기록 없음"},' +
+    '"int_arch":{"score":9},"int_cmf":3,"ergonomics":{"score":"4점","evidence":"측방 시야"},"hmi":{"score":0}}\n```';
+  const r = L.parseEvalAnswer(ans);
+  assert.deepEqual(r.scores, { ai_proportion: 4, ai_form: 5, ai_int_cmf: 3, ai_ergonomics: 4 });
+  assert.equal(r.notes.note_proportion, 'AI: 비례 안정 (confidence 0.7)');
+  assert.ok(r.errors.some(e => e.startsWith('C4: 1~5 밖')) && r.errors.some(e => e.startsWith('C7: 1~5 밖')) && r.errors.some(e => e === 'C8: 답에 없음'));
+  const x = L.applyEvalAnswer({ ...m, note_ergonomics: '디자이너 메모' }, r);
+  assert.deepEqual([x.score_form, x.ai_form, x.ai_proportion, x.note_ergonomics, x.prompt_version], [2, 5, 4, '디자이너 메모', L.EVAL_PROMPT_VERSION]);
+  assert.equal(L.modelEvaluations([L.cleanModel(x)])[0].scores.score_form, 2);   // 디자이너 점수가 이김
+  assert.throws(() => L.parseEvalAnswer('모르겠습니다'), /JSON 객체/);
 });
 
 console.log('전문가 피드백');
@@ -388,13 +438,15 @@ test('opsStatus: 예시는 주간 주기·한 주 전 갱신 → 오늘 예정, 
   assert.deepEqual([b.daysLeft, b.state], [-2, 'overdue']);
   assert.equal(L.opsStatus(L.defaultOps(), [], NOW).state, 'none');
 });
-test('오래된 자료: 기준 15년(5479일) — 넘은 Mecalac 예시 1건, 수집일 없는 XCMG 1건', () => {
+test('오래된 자료: 수집일 기준 최장 20년(7305일, 2026-09-29 오후 늦게 답변) — 넘은 Mecalac 예시 1건, 수집일 없는 XCMG 1건', () => {
   const a = L.opsStatus(db.ops, db.models, NOW);
-  assert.equal(a.staleDays, 5479);
-  assert.deepEqual(a.stale.map(x => x.model_name + ':' + x.age), ['예시-MW12:5600']);
+  assert.equal(a.staleDays, 7305);
+  assert.deepEqual(a.stale.map(x => x.model_name + ':' + x.age), ['예시-MW12:7400']);
   assert.deepEqual(a.undated.map(x => x.model_name), ['예시-EX215C']);
-  assert.deepEqual(L.staleModels(db.models, NOW, 26).stale.map(x => x.age), [5600, 27]); // 기준을 줄이면 WL380(27일)도, 오래된 순
-  assert.equal(L.staleModels(db.models, NOW, 5601).stale.length, 0);                     // 경계: 5600일 < 5601일
+  assert.deepEqual(L.staleModels(db.models, NOW, 26).stale.map(x => x.age), [7400, 27]); // 기준을 줄이면 WL380(27일)도, 오래된 순
+  assert.equal(L.staleModels(db.models, NOW, 7400).stale.length, 0);                     // 경계: 「넘은」 것만 — 7400일은 7400일 기준에 안 걸림
+  assert.equal(L.staleModels(db.models, NOW, 7399).stale.length, 1);
+  assert.equal(L.staleLabel(7305), '20년(7305일)');
   assert.equal(L.staleLabel(5479), '15년(5479일)');
   assert.equal(L.staleLabel(180), '180일');
 });
@@ -412,14 +464,18 @@ test('단계 체크 → 사이클 완료: 이력 추가, 마지막 갱신일 오
 });
 test('restoreOps: 잘못된 값은 기본값', () => {
   const o = L.restoreOps({ cycle: 'daily', stale_days: 1, last_update: '언젠가', steps: { qa: '2026-09-01', x: 1 } });
-  assert.deepEqual([o.cycle, o.stale_days, o.last_update, Object.keys(o.steps)], ['weekly', 5479, '', ['qa']]);
+  assert.deepEqual([o.cycle, o.stale_days, o.last_update, Object.keys(o.steps)], ['weekly', 7305, '', ['qa']]);
   assert.equal(L.restoreOps({ stale_days: 10958, cycle: 'quarterly' }).stale_days, 10958);   // 30년까지
-  assert.equal(L.restoreOps({ stale_days: 10959, cycle: 'quarterly' }).stale_days, 5479);
+  assert.equal(L.restoreOps({ stale_days: 10959, cycle: 'quarterly' }).stale_days, 7305);
 });
-test('기본값 변경(주간·15년): 예전 기본값(월간·180일) 저장본은 한 번 옮기고, 사용자가 고른 값은 둠', () => {
-  assert.deepEqual([L.defaultOps().cycle, L.defaultOps().stale_days], ['weekly', 5479]);
+test('기본값 변경(주간·20년): 예전 기본값(월간·180일, 15년) 저장본은 한 번 옮기고, 사용자가 고른 값은 둠', () => {
+  assert.deepEqual([L.defaultOps().cycle, L.defaultOps().stale_days], ['weekly', 7305]);
   const old = L.restoreOps({ cycle: 'monthly', stale_days: 180, last_update: '2026-09-01' });
-  assert.deepEqual([old.cycle, old.stale_days, old.last_update, old.defaults], ['weekly', 5479, '2026-09-01', 2]);
+  assert.deepEqual([old.cycle, old.stale_days, old.last_update, old.defaults], ['weekly', 7305, '2026-09-01', 3]);
+  const p15 = L.restoreOps({ cycle: 'biweekly', stale_days: 5479, defaults: 2 });           // 15년 기본값 그대로 → 20년, 주기는 사용자 값
+  assert.deepEqual([p15.cycle, p15.stale_days, p15.defaults], ['biweekly', 7305, 3]);
+  assert.equal(L.restoreOps({ cycle: 'weekly', stale_days: 5479, defaults: 3 }).stale_days, 5479); // 20년 뒤 사용자가 15년을 고름
+  assert.equal(L.restoreOps({ cycle: 'weekly', stale_days: 3650, defaults: 2 }).stale_days, 3650); // 사용자가 고친 값
   const kept = L.restoreOps({ cycle: 'monthly', stale_days: 180, defaults: 2 });            // 옮긴 뒤 사용자가 다시 고른 값
   assert.deepEqual([kept.cycle, kept.stale_days], ['monthly', 180]);
   assert.deepEqual([L.restoreOps({ cycle: 'monthly', stale_days: 365 }).cycle, L.restoreOps({ cycle: 'monthly', stale_days: 365 }).stale_days], ['monthly', 365]);
@@ -445,23 +501,28 @@ test('buildReport: Scope 6건 기준, 비교표·피드백·운영 포함', () =
   assert.equal(rep.ops.state, 'due');
   assert.equal(L.buildReport(dbr, { now: NOW, useScope: false }).overview.models, 15);
 });
-test('reportSheets: 시트 9개(디자인평가 추가), 디자인평가 6행·브랜드요약 6행', () => {
+test('reportSheets: 시트 9개, 디자인평가 6행(+척도·기준 버전)·평가표(기준 × 브랜드, 자료 5절 모양)', () => {
   const sh = L.reportSheets(rep);
-  assert.deepEqual(sh.map(x => x.name), ['요약', '디자인평가', '브랜드요약', '점수비교', '강약점', '태그트렌드', '선택비교', '전문가피드백', '운영']);
-  assert.equal(sh[1].aoa.length, 7);
-  assert.deepEqual(sh[1].aoa[0].slice(2, 4), ['Exterior 조형(0~5)', 'Cabin / HMI(0~5)']);
+  assert.deepEqual(sh.map(x => x.name), ['요약', '디자인평가', '브랜드요약', '평가표', '강약점', '태그트렌드', '선택비교', '전문가피드백', '운영']);
+  assert.equal(sh[1].aoa.length, 10);
+  assert.deepEqual(sh[1].aoa[0].slice(2, 4), ['C1 Exterior Proportion & Stance (15%)', 'C2 Exterior Form & Surface Quality (15%)']);
+  const t = sh[3].aoa;
+  assert.deepEqual(t[0].slice(0, 3), ['평가 기준', '가중치(%)', 'CAT']);
+  assert.deepEqual(t[1].slice(0, 2), ['C1 Exterior Proportion & Stance', 15]);
+  assert.equal(t[9][0], '가중 점수');
+  assert.equal(t[9][t[0].indexOf('Volvo CE')], '4.3');
   assert.equal(sh[2].aoa.length, 7);
   assert.equal(sh[7].aoa[3][4], '<script>alert(1)</script> 확인'); // 엑셀은 원문 그대로
   assert.ok(!L.reportSheets(L.buildReport({ ...dbr, compare: [] }, { now: NOW })).some(x => x.name === '선택비교'));
 });
-test('디자인 평가(모델별 점수): 브랜드 순서, 모델 평균, 0 점도 평균에 들어감', () => {
+test('디자인 평가(모델별 점수): 브랜드 순서, 가중 점수, 예시 Sany 는 AI 점수만(검증 전)', () => {
   const ev = rep.insight.evaluations;
   assert.equal(ev.length, 6);
   assert.equal(ev[0].short, 'CAT');
   const volvo = ev.find(e => e.short === 'Volvo CE');
-  assert.deepEqual([volvo.avg, volvo.rated, volvo.complete], [4, 4, true]);
-  const z = L.modelEvaluations([L.cleanModel({ brand: 'JCB', model_name: 'z', score_exterior: 0, score_cmf: 4 })])[0];
-  assert.deepEqual([z.avg, z.rated, z.complete, z.scores.score_cabin], [2, 2, false, null]);
+  assert.deepEqual([volvo.avg, volvo.rated, volvo.complete, volvo.coverage], [4.3, 8, true, 100]);
+  const sany = L.modelEvaluations(db.models.filter(m => m.model_name === '예시-EX215S'))[0];
+  assert.deepEqual([sany.aiOnly, sany.avg], [8, 3.15]);                 // (60+45+30+45+30+45+30+30)/100
 });
 test('reportHtml: 항목 10개(2번 디자인 평가 + 3~6번 평가 기반 Insight), 글자는 이스케이프', () => {
   const html = L.reportHtml(rep);
@@ -471,6 +532,7 @@ test('reportHtml: 항목 10개(2번 디자인 평가 + 3~6번 평가 기반 Insi
   assert.equal((html.match(/data-section="/g) || []).length, L.REPORT_SECTIONS.length);
   assert.ok(html.indexOf('data-section="evaluation"') < html.indexOf('data-section="brands"'));
   assert.ok(html.includes('예시-EX230'));
+  assert.ok(html.includes('C4 실내 구성 15%') && html.includes('1 개선 필요 · 2 기본 수준'));
   assert.ok(html.startsWith('<!doctype html>'));
   assert.ok(!html.includes('<script>alert(1)'));
   assert.ok(html.includes('&lt;script&gt;alert(1)'));
@@ -482,3 +544,5 @@ console.log('\n' + passed + '개 통과' + (process.exitCode ? ' · 실패 있�
 
 // 과제 B(업무보고 Agent) 테스트도 함께 돌린다 — 따로: node test/report-logic.test.mjs
 await import('./report-logic.test.mjs');
+// 과제 A·B 공용 AI 연결 설정(OpenAI 호환 엔드포인트) — 따로: node test/ai-endpoint.test.mjs
+await import('./ai-endpoint.test.mjs');

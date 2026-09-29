@@ -161,9 +161,10 @@ for (const f of files) fs.writeFileSync(path.join(dir, f.name), f.buf);
 const sample = {
   settings: { type: 'weekly', refDay: '2026-09-25', weekStart: 1, author: '보고자(가상)', title: '디자인팀(가상)' },
   projects: [
-    { name: '캡 인테리어 개선', keywords: ['캡', '조작부', '모델링'] },
-    { name: 'CMF 샘플 평가', keywords: ['CMF', '색상', '샘플'] },
-    { name: '전시회 준비', keywords: ['전시', '부스'] }
+    // group = 주간보고 양식 표의 Business Group(가상)
+    { name: '캡 인테리어 개선', keywords: ['캡', '조작부', '모델링'], group: '건설기계(가상)' },
+    { name: 'CMF 샘플 평가', keywords: ['CMF', '색상', '샘플'], group: '건설기계(가상)' },
+    { name: '전시회 준비', keywords: ['전시', '부스'], group: '전시·홍보(가상)' }
   ],
   // 지난주(09-14 ~ 09-20)에 승인한 가상 보고서 — 「이전 보고서 계획 대비」 시연용
   history: [{

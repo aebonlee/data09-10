@@ -515,6 +515,23 @@
     });
     return dl;
   }
+  function evalCard(m) {
+    var e = L.modelEvaluations([m])[0];
+    return h('section', { class: 'card span-all' }, h('h2', null, 'Design Evaluation — 8기준', h('span', { class: 'kind obs' }, '평가 1~5')),
+      h('p', { class: 'note' }, '가중 점수 ' + (e.avg == null ? '-' : e.avg + ' / 5 (' + L.levelLabel(e.avg) + ')') + ' · 평가한 비중 ' + e.coverage + '% · 기준 ' + e.rated + '/' + L.SCORE_AXES.length +
+        (e.aiOnly ? ' · 디자이너 검증 전 AI 점수 ' + e.aiOnly + '개' : '')),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+        h('thead', null, h('tr', null, ['평가 기준', '비중', '최종', '디자이너', 'AI', '근거 / 코멘트'].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+        h('tbody', null, L.SCORE_AXES.map(function (a) {
+          var f = e.scores[a.key];
+          return h('tr', null, h('th', { scope: 'row' }, 'C' + a.no + ' ' + a.name), h('td', { class: 'num' }, a.weight + '%'),
+            h('td', { class: 'num' }, f == null ? '-' : f + (e.source[a.key] === 'ai' ? ' (AI)' : '')),
+            h('td', { class: 'num' }, m[a.key] === '' || m[a.key] == null ? '-' : String(m[a.key])),
+            h('td', { class: 'num' }, m[a.aiKey] === '' || m[a.aiKey] == null ? '-' : String(m[a.aiKey])),
+            h('td', null, m[a.noteKey] || ''));
+        })))),
+      m.legacy_scores ? h('p', { class: 'note' }, '이전 4축 점수(v0.3, 참고용 — 계산에 쓰지 않음): ' + Object.keys(m.legacy_scores).map(function (k) { return k + ' ' + m.legacy_scores[k]; }).join(', ')) : null);
+  }
   function viewDetail(id) {
     var m = modelById(id);
     if (!m) return [h('p', { class: 'empty' }, '해당 모델이 없습니다. ', h('a', { href: '#/gallery' }, '갤러리로'))];
@@ -567,6 +584,7 @@
         block('cabin', 'obs', '관찰 OBSERVATION', obsNote.cloneNode(true)),
         block('cmf', 'obs', '관찰 OBSERVATION', obsNote.cloneNode(true)),
         block('service', 'obs', '관찰 OBSERVATION', obsNote.cloneNode(true)),
+        evalCard(m),
         block('evidence', 'meta', '근거·검증'))
     ];
   }
@@ -650,6 +668,46 @@
       return h('fieldset', { class: 'block' }, h('legend', null, b.name, h('span', { class: 'kind ' + kindCls }, kindLabel)), note ? h('p', { class: 'note' }, note) : null, grid);
     }
 
+    /* 디자인 평가 8기준 — 기준마다 디자이너 점수 · AI 점수 · 근거/코멘트 (평가 기준 자료 5·6절) */
+    function evalFs() {
+      var rows = L.SCORE_AXES.map(function (a) {
+        var d = control(L.fieldByKey(a.key), m), ai = control(L.fieldByKey(a.aiKey), m);
+        var nt = h('input', { name: a.noteKey, value: m[a.noteKey] || '', placeholder: '이미지 / URL / 분석 근거 / Designer Comment' });
+        d.setAttribute('aria-label', 'C' + a.no + ' 디자이너 점수'); ai.setAttribute('aria-label', 'C' + a.no + ' AI 점수'); nt.setAttribute('aria-label', 'C' + a.no + ' 근거');
+        return h('tr', null, h('th', { scope: 'row' }, 'C' + a.no + ' ' + a.name, h('div', { class: 'note' }, a.ko + ' · 비중 ' + a.weight + '%'),
+          h('details', null, h('summary', { class: 'note' }, '체크리스트'), h('ul', { class: 'note' }, a.checks.map(function (c) { return h('li', null, c); })))),
+          h('td', null, d), h('td', null, ai), h('td', null, nt));
+      });
+      var ansTa = h('textarea', { rows: 4, placeholder: 'AI 가 준 JSON 답을 붙여 넣어 주세요' });
+      function formModel() {
+        var data = {}; L.FIELDS.forEach(function (f) { var el = form.elements[f.key]; if (el) data[f.key] = el.value; });
+        return L.cleanModel(data);
+      }
+      function applyAnswer(text) {
+        try {
+          var r = L.parseEvalAnswer(text), n = 0;
+          L.SCORE_AXES.forEach(function (a) {
+            if (r.scores[a.aiKey] != null) { form.elements[a.aiKey].value = String(r.scores[a.aiKey]); n++; }
+            if (r.notes[a.noteKey] && !form.elements[a.noteKey].value.trim()) form.elements[a.noteKey].value = r.notes[a.noteKey];
+          });
+          if (form.elements.prompt_version) form.elements.prompt_version.value = L.EVAL_PROMPT_VERSION;
+          toast('AI 점수 ' + n + '개를 넣었습니다(디자이너 점수는 그대로).' + (r.errors.length ? ' 참고: ' + r.errors.join(' · ') : '') + ' 저장해야 반영됩니다.');
+        } catch (e) { toast('읽지 못했습니다: ' + e.message, true); }
+      }
+      return h('fieldset', { class: 'block' }, h('legend', null, 'Design Evaluation — 8기준', h('span', { class: 'kind obs' }, '평가 1~5')),
+        h('p', { class: 'note' }, '척도: ' + levelNote() + '. 디자이너 점수(Designer Validation)가 최종 점수이고, 비어 있으면 AI 점수(AI Analysis)를 「검증 전」으로 씁니다. 근거 칸에 이미지·URL·분석 근거·코멘트를 적어 주세요. 기준 설명은 07 Insight 「평가 기준」.'),
+        h('div', { class: 'table-wrap' }, h('table', { class: 'list eval-table' },
+          h('thead', null, h('tr', null, ['평가 기준', '디자이너', 'AI', '근거 / 코멘트'].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+          h('tbody', null, rows))),
+        h('details', { style: 'margin-top:10px' }, h('summary', null, 'AI 1차 평가(선택) — 관찰 기록으로 AI 점수 받기'),
+          h('p', { class: 'note' }, '위 관찰 블록(Design·Cabin·CMF·Service)에 적은 글과 태그만 보냅니다. 이미지·출처 URL 은 보내지 않습니다. 관찰 기록이 없는 기준은 AI 가 점수를 비워 둡니다. 받은 점수는 「AI」 칸에만 들어갑니다.'),
+          h('div', { class: 'btn-row' },
+            h('button', { type: 'button', class: 'btn', onclick: function () { copyText(L.evalPrompt(formModel())); } }, 'AI 평가 프롬프트 복사'),
+            aiSend('설정한 AI 서버로 보내기', function () { return L.evalPrompt(formModel()); }, function (t) { ansTa.value = t; applyAnswer(t); })),
+          field('AI 답', ansTa),
+          h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn', onclick: function () { applyAnswer(ansTa.value); } }, 'AI 답 읽기'))));
+    }
+
     /* 이미지 */
     var mediaBox = h('div', { class: 'media-list' });
     function drawMedia() {
@@ -702,6 +760,7 @@
       blockFs('cabin', 'obs', '관찰 OBSERVATION'),
       blockFs('cmf', 'obs', '관찰 OBSERVATION'),
       blockFs('service', 'obs', '관찰 OBSERVATION'),
+      evalFs(),
       blockFs('evidence', 'meta', '근거·검증', '관찰 블록을 AI 가 채웠다면 「관찰 입력 출처」를 AI 관찰로 두고, 디자이너가 확인한 뒤 검증 상태를 「확정」으로 바꿉니다. Embedding ID 는 2단계용 빈 칸입니다.'),
       blockFs('scope', 'meta', 'Scope'),
       h('div', { class: 'submit-bar' },
@@ -719,6 +778,7 @@
       var data = { id: orig ? orig.id : '' };
       L.FIELDS.forEach(function (f) { var el = form.elements[f.key]; if (el) data[f.key] = el.value; });
       data.media = media;
+      if (orig && orig.legacy_scores) data.legacy_scores = orig.legacy_scores;   // 예전 4축 점수는 보존
       var clean = L.cleanModel(data);
       clean.id = data.id;
       var errs = L.validateModel(clean, db.models);
@@ -918,8 +978,31 @@
             h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
               confirmBox('모든 자료 지우기', '이 브라우저에 저장한 모델·Scope 를 모두 지웁니다. 되돌릴 수 없습니다.', '모두 지우기', function () { db = L.emptyDb(); S.clearDb(); save(); scopeDraft = null; render(); }, true);
             } }, '모든 자료 지우기')),
-          h('p', { class: 'note', style: 'margin-top:10px' }, '현재 저장 크기 약 ' + S.sizeKb() + 'KB. 브라우저마다 한도(대개 5MB 안팎)가 있어, 이미지가 많아지면 JSON 백업으로 나눠 보관하세요.')))
+          h('p', { class: 'note', style: 'margin-top:10px' }, '현재 저장 크기 약 ' + S.sizeKb() + 'KB. 브라우저마다 한도(대개 5MB 안팎)가 있어, 이미지가 많아지면 JSON 백업으로 나눠 보관하세요.'))),
+      window.AIPanel ? AIPanel.settingsCard({ toast: toast, onChange: render }) : null
     ];
+  }
+  /* 2026-09-29 오후 늦게 — 설정한 OpenAI 호환 AI 서버(사내 온프레미스 LLM 포함)로 프롬프트를 보내는 버튼. 설정은 06 가져오기·내보내기 */
+  function aiSend(label, getPrompt, onAnswer) {
+    return window.AIPanel ? AIPanel.sendButton(label, getPrompt, onAnswer, { toast: toast, settingsHref: '#/data' }) : null;
+  }
+  function levelNote() { return L.SCORE_LEVELS.map(function (l) { return l.value + ' ' + l.label; }).join(' · '); }
+  /* 평가 기준 안내 — 기준·비중·평가 목적·체크리스트·5점 Scale (평가 기준 자료 2~4절) */
+  function rubricCard(open) {
+    return h('section', { class: 'card' }, h('h2', null, '평가 기준 — 8-Criteria Design Evaluation Framework'),
+      h('p', { class: 'note' }, '수강생이 올린 「BM Agent 평가 점수 기준 자료」의 기준·권장 비중·5점 Scale 입니다(' + L.RUBRIC_VERSION + '). 가중 점수 = Σ(비중 × 점수) ÷ 평가한 기준의 비중 합. ' +
+        '기준마다 디자이너 점수와 AI 점수를 따로 두고, 최종 점수는 디자이너 점수가 있으면 그것, 없으면 AI 점수(「AI」 표시 — 검증 전)입니다.'),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+        h('thead', null, h('tr', null, ['No.', '평가 기준', '비중', '평가 목적 · 주요 세부 항목'].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+        h('tbody', null, L.SCORE_AXES.map(function (a) {
+          return h('tr', null, h('td', { class: 'num' }, String(a.no)), h('th', { scope: 'row' }, a.name, h('div', { class: 'note' }, a.ko)), h('td', { class: 'num' }, a.weight + '%'),
+            h('td', null, a.purpose, h('div', { class: 'note' }, a.items),
+              h('details', open ? { open: true } : null, h('summary', null, '체크리스트 ' + a.checks.length + '문항'), h('ul', null, a.checks.map(function (c) { return h('li', null, c); })))));
+        })))),
+      h('div', { class: 'table-wrap', style: 'margin-top:10px' }, h('table', { class: 'list' },
+        h('thead', null, h('tr', null, ['점수', '판단 기준', '해석'].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+        h('tbody', null, L.SCORE_LEVELS.map(function (l) { return h('tr', null, h('td', { class: 'num' }, String(l.value)), h('th', { scope: 'row' }, l.label), h('td', null, l.meaning)); })))),
+      h('p', { class: 'note' }, '운영 원칙(자료 8절): 동급끼리 비교 · Engineering Specs 는 점수가 아니라 맥락 자료 · 관찰 가능한 정보와 출처 없이 AI 가 추정하지 않음 · 점수보다 「왜 그렇게 평가했는가」를 추적(근거/코멘트 칸).'));
   }
 
   /* ══ 2026-09-29 추가 — 수강생 Proto Web(End-to-End 13단계) 중 08 Insight · 10 Report · 11 Designer Validation · 13 Scheduled Update ══
@@ -979,11 +1062,16 @@
           h('td', null, r.tags.map(function (t) { return h('span', { class: 'tag muted' }, t.tag + ' ' + t.count); })),
           h('td', null, r.latest || '-'), h('td', { class: 'num' + (r.incomplete ? '' : ' zero') }, String(r.incomplete)));
       }))));
+    /* 평가 기준 자료 5절의 평가표 모양 — 행 = 기준, 열 = 브랜드 */
+    var rowsB = ins.scores.rows;
     var scoreTbl = h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
-      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '브랜드'), axes.map(function (a) { return h('th', { scope: 'col', class: 'num' }, a.name); }), h('th', { scope: 'col', class: 'num' }, '평균'))),
-      h('tbody', null, ins.scores.rows.map(function (r) {
-        return h('tr', null, h('th', { scope: 'row' }, r.short), axes.map(function (a) { return scoreCell(r.scores[a.key], r.diff[a.key]); }), h('td', { class: 'num' }, r.overall == null ? '-' : String(r.overall)));
-      }), h('tr', { class: 'sum' }, h('th', { scope: 'row' }, '축 평균'), axes.map(function (a) { return h('td', { class: 'num' }, a.avg == null ? '-' : a.avg + ' (' + a.n + '건)'); }), h('td', null, '')))));
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '평가 기준'), h('th', { scope: 'col', class: 'num' }, '가중치'),
+        rowsB.map(function (r) { return h('th', { scope: 'col', class: 'num' }, r.short); }), h('th', { scope: 'col', class: 'num' }, '기준 평균'))),
+      h('tbody', null, axes.map(function (a) {
+        return h('tr', null, h('th', { scope: 'row' }, 'C' + a.no + ' ' + a.name), h('td', { class: 'num' }, a.weight + '%'),
+          rowsB.map(function (r) { return scoreCell(r.scores[a.key], r.diff[a.key]); }), h('td', { class: 'num' }, a.avg == null ? '-' : a.avg + ' (' + a.n + '건)'));
+      }), h('tr', { class: 'sum' }, h('th', { scope: 'row' }, '가중 점수'), h('td', { class: 'num' }, '100%'),
+        rowsB.map(function (r) { return h('td', { class: 'num' }, r.overall == null ? '-' : String(r.overall)); }), h('td', null, '')))));
     var swGrid = h('div', { class: 'sw-grid' }, ins.sw.map(function (r) {
       return h('div', { class: 'sw-card' }, h('h3', null, r.short),
         r.strengths.length ? [h('div', { class: 'sw-k ok' }, '강점'), h('ul', null, r.strengths.map(function (x) { return h('li', null, x.text); }))] : null,
@@ -1002,19 +1090,21 @@
     }));
 
     /* 평가 점수 빠른 입력 — 바꾸면 바로 저장 */
+    var evById = {}; ins.evaluations.forEach(function (e) { evById[e.id] = e; });
     var quick = h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
-      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '모델'), axes.map(function (a) { return h('th', { scope: 'col' }, a.name); }))),
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '모델'), axes.map(function (a) { return h('th', { scope: 'col', title: a.name }, 'C' + a.no + ' ' + a.ko, h('div', { class: 'note' }, a.weight + '%')); }), h('th', { scope: 'col', class: 'num' }, '가중 점수'))),
       h('tbody', null, L.filterModels(models, {}).map(function (m) {
+        var ev = evById[m.id] || L.modelEvaluations([m])[0];
         return h('tr', null, h('th', { scope: 'row' }, h('a', { href: '#/model/' + m.id }, L.brandShort(m.brand) + ' ' + m.model_name)),
           axes.map(function (a) {
-            var s = selectEl(a.key, L.SCORE_OPTIONS, m[a.key], '-');
-            s.setAttribute('aria-label', m.model_name + ' ' + a.name + ' 평가');
+            var s = selectEl(a.key, L.SCORE_OPTIONS.map(function (o) { return { value: o.value, label: o.value }; }), m[a.key], ev.source[a.key] === 'ai' ? 'AI ' + ev.scores[a.key] : '-');
+            s.setAttribute('aria-label', m.model_name + ' C' + a.no + ' ' + a.name + ' 디자이너 점수');
             s.addEventListener('change', function () {
               var x = modelById(m.id); if (!x) return;
               x[a.key] = L.cleanScore(s.value); save(); render();
             });
             return h('td', null, s);
-          }));
+          }), h('td', { class: 'num' }, ev.avg == null ? '-' : ev.avg + (ev.coverage < 100 ? ' (' + ev.coverage + '%)' : '')));
       }))));
 
     /* 요약 코멘트 — 직접 쓰거나 AI 요약(반자동)을 붙여 넣습니다 */
@@ -1024,7 +1114,8 @@
     var noteCard = h('section', { class: 'card' }, h('h2', null, '요약 코멘트'),
       h('p', { class: 'note' }, '리포트 「7. 요약 코멘트」 항목에 들어갑니다. AI 요약을 쓰려면 ① 프롬프트를 복사해 ChatGPT 등에 붙여 넣고 ② 받은 답을 아래 칸에 붙여 넣은 뒤 ③ 출처를 「AI 요약(검토 필요)」로 두고 저장해 주세요. 프롬프트에는 모델명·점수·태그만 들어가고 이미지·출처 URL 은 들어가지 않습니다.'),
       h('div', { class: 'btn-row', style: 'margin-bottom:10px' },
-        h('button', { type: 'button', class: 'btn', onclick: function () { copyText(L.insightPrompt(ins, sc)); } }, 'AI 요약 프롬프트 복사')),
+        h('button', { type: 'button', class: 'btn', onclick: function () { copyText(L.insightPrompt(ins, sc)); } }, 'AI 요약 프롬프트 복사'),
+        aiSend('설정한 AI 서버로 보내기', function () { return L.insightPrompt(ins, sc); }, function (t) { noteTa.value = t.trim(); originSel.value = 'AI 요약(검토 필요)'; toast('AI 답을 칸에 넣었습니다. 검토 후 「저장」을 눌러 주세요.'); })),
       h('div', { class: 'form-grid' }, field('요약 코멘트', noteTa, { span: true }), field('작성 출처', originSel)),
       h('div', { class: 'btn-row', style: 'margin-top:10px' },
         h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
@@ -1041,14 +1132,15 @@
         h('ul', null, ins.headline.map(function (x) { return h('li', null, x); })),
         h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/report' }, 'Benchmarking Report 로 보기'), h('a', { class: 'btn', href: '#/feedback/scores' }, '점수 비교에 피드백 남기기'))),
       h('section', { class: 'card' }, h('h2', null, '브랜드별 요약'), summaryTbl),
-      h('section', { class: 'card' }, h('h2', null, '점수 비교'),
-        h('p', { class: 'note' }, '디자이너 평가(0~5)의 브랜드 평균입니다. 괄호는 축 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
-      h('section', { class: 'card' }, h('h2', null, '강·약점'), h('p', { class: 'note' }, '축 평균보다 0.5점 이상 높거나 낮은 축, 출력 대비 중량(kW/t)이 전체 평균과 10% 이상 다른 경우를 적습니다.'), swGrid),
+      h('section', { class: 'card' }, h('h2', null, '평가표 — 기준 × 브랜드'),
+        h('p', { class: 'note' }, '8기준 최종 점수(1~5)의 브랜드 평균과 가중 점수입니다. 괄호는 기준 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
+      h('section', { class: 'card' }, h('h2', null, '강·약점'), h('p', { class: 'note' }, '기준 평균보다 0.5점 이상 높거나 낮은 기준, 출력 대비 중량(kW/t)이 전체 평균과 10% 이상 다른 경우를 적습니다.'), swGrid),
       h('div', { class: 'grid-2' },
         h('section', { class: 'card' }, h('h2', null, 'Design Tag 트렌드'), tagTbl),
-        h('section', { class: 'card' }, h('h2', null, 'White Space'), h('p', { class: 'note' }, '전체 평균이 낮은 축부터 적습니다. 가장 높은 브랜드도 4점이 안 되면 「비어 있는 자리」로 표시합니다.'), wsList)),
+        h('section', { class: 'card' }, h('h2', null, 'White Space'), h('p', { class: 'note' }, '전체 평균이 낮은 기준부터 적습니다. 가장 높은 브랜드도 4점이 안 되면 「비어 있는 자리」로 표시합니다.'), wsList)),
       noteCard,
-      h('section', { class: 'card' }, h('h2', null, '디자인 평가 — 모델별 점수(0~5)'), h('p', { class: 'note' }, '0~5점으로 골라 주세요(0 도 점수이고, 「-」는 평가 안 함). 이 표는 리포트 「2. 디자인 평가」에 그대로 들어가고, 위 Insight 는 이 점수로 계산합니다. 바꾸면 바로 저장되고 위 표가 다시 계산됩니다. 점수는 관찰(OBSERVATION)이라 자료 등록 화면의 각 블록에도 같은 칸이 있습니다.'), quick)
+      h('section', { class: 'card' }, h('h2', null, '디자인 평가 — 모델별 8기준 점수(1~5)'), h('p', { class: 'note' }, '디자이너 점수를 1~5점으로 골라 주세요(' + levelNote() + ', 「-」는 평가 안 함, 「AI n」은 디자이너 검증 전 AI 점수). 이 표는 리포트 「2. 디자인 평가」에 그대로 들어가고, 위 Insight 는 이 점수로 계산합니다. 바꾸면 바로 저장되고 위 표가 다시 계산됩니다. AI 점수·근거/코멘트는 자료 등록 화면의 「Design Evaluation」 블록에서 넣습니다.'), quick),
+      rubricCard(false)
     ];
   }
 
@@ -1163,7 +1255,7 @@
     var staleIn = h('input', { name: 'stale', type: 'number', min: 7, max: L.STALE_DAYS_MAX, value: String(ops.stale_days), inputmode: 'numeric' });
     var lastIn = h('input', { name: 'last', type: 'date', value: ops.last_update || '' });
     function saveSettings() {
-      var o = L.restoreOps({ cycle: cyc.value, stale_days: staleIn.value, last_update: lastIn.value, steps: ops.steps, history: ops.history, defaults: 2 });
+      var o = L.restoreOps({ cycle: cyc.value, stale_days: staleIn.value, last_update: lastIn.value, steps: ops.steps, history: ops.history, defaults: 3 });
       if (String(o.stale_days) !== String(Number(staleIn.value))) toast('오래된 자료 기준은 7~' + L.STALE_DAYS_MAX + '일(30년)입니다. ' + o.stale_days + '일로 두었습니다.', true);
       db.ops = o; save(); toast('운영 설정을 저장했습니다.'); render();
     }
@@ -1196,7 +1288,7 @@
             else doIt();
           } }, '이번 사이클 완료'))),
         h('section', { class: 'card' }, h('h2', null, '설정'),
-          h('div', { class: 'form-grid' }, field('업데이트 주기', cyc), field('오래된 자료 기준(일)', staleIn, { hint: '수집일이 이보다 오래되면 경고합니다. 기본 5479일 = 15년.' }),
+          h('div', { class: 'form-grid' }, field('업데이트 주기', cyc), field('오래된 자료 기준(일)', staleIn, { hint: '수집일이 이보다 오래되면 경고합니다. 기본 7305일 = 20년(수집일 기준).' }),
             field('마지막 갱신일', lastIn, { hint: '보통은 「이번 사이클 완료」가 채웁니다.' })),
           h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn', onclick: saveSettings }, '설정 저장')))),
       h('section', { class: 'card' }, h('h2', null, '오래된 자료 · 수집일 없음'),

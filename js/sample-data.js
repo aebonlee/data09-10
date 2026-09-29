@@ -118,15 +118,23 @@
     ['Wheel Loader', 'komatsu', '예시-WL380', 2023, 18900, 164, 3.4, 1, ['cmf'], false, ['각진 볼륨'], 27],
     ['Wheel Loader', 'liebherr', '예시-WL526', 2024, 15500, 140, 2.9, 4, ['fq'], false, ['라운드 후드'], 14],
     /* 2026-09-29 수강생 요청으로 경쟁사에 Mecalac 추가 — 휠형 굴착기 예시(가상) */
-    ['Excavator', 'mecalac', '예시-MW12', 2025, 11900, 85, 0.4, 5, ['fq', 'cab'], true, ['슬림 필러', '넓은 글라스'], 5600]  // 수집 15년 넘음 — 오래된 자료 경고 시연(가상)
+    ['Excavator', 'mecalac', '예시-MW12', 2005, 11900, 85, 0.4, 5, ['fq', 'cab'], true, ['슬림 필러', '넓은 글라스'], 7400]  // 수집 20년 넘음 — 오래된 자료 경고 시연(가상, 2026-09-29 오후 늦게 기준 20년)
   ];
 
-  /* 디자이너 평가 점수(1~5) 예시 — [Exterior, Cabin/HMI, CMF, Service/Safety], 모두 가상 값. null = 미평가 */
+  /* 디자인 평가 8기준 예시(1~5) — [C1 비례·자세, C2 형태·면, C3 외장 CMF, C4 실내 구성, C5 실내 CMF, C6 인간공학, C7 HMI, C8 아이덴티티].
+     모두 가상 값. null = 미평가(모델 전체 또는 그 기준). 기준·비중은 수강생 제출 평가 기준 자료(logic.js SCORE_AXES) */
   var SCORES = {
-    '예시-EX210': [4, 4, 3, 4], '예시-EX215': [3, 3, 3, 4], '예시-EX230': [4, 5, 4, 3], '예시-EX220': [3, 3, 3, 3],
-    '예시-EX220X': [5, 3, 3, 3], '예시-EX145': [3, 4, 3, 2], '예시-EX215C': [3, 2, 2, 3], '예시-EX215S': [4, 2, 3, 3],
-    '예시-MX035': [3, 3, 3, 4], '예시-MX030': null, '예시-WL950': [4, 4, 3, 4], '예시-WL150': [4, 5, 3, 3],
-    '예시-WL380': [3, 3, 3, 3], '예시-WL526': [3, 3, 2, 3], '예시-MW12': [4, 4, 3, 3]
+    '예시-EX210': [4, 4, 3, 4, 4, 3, 4, 4], '예시-EX215': [3, 3, 3, 3, 3, 4, 3, 3], '예시-EX230': [4, 4, 4, 5, 4, 5, 4, 4],
+    '예시-EX220': [3, 3, 3, 3, 2, 3, null, 3], '예시-EX220X': [5, 4, 3, 3, 3, 3, 3, 4], '예시-EX145': [3, 3, 4, 4, 3, 2, 3, 3],
+    '예시-EX215C': [3, 2, 2, 2, 2, 3, 2, 2], '예시-EX215S': null, '예시-MX035': [3, 3, 3, 3, 3, 4, 3, 3], '예시-MX030': null,
+    '예시-WL950': [4, 4, 3, 4, 4, 4, 4, 4], '예시-WL150': [4, 4, 3, 5, 4, 5, 4, 4], '예시-WL380': [3, 3, 3, 3, 3, 3, 3, 3],
+    '예시-WL526': [3, 3, 2, 3, 3, 3, 3, 3], '예시-MW12': [4, 4, 3, 4, 3, 4, 3, 4]
+  };
+  /* AI 1차 평가 예시(디자이너 검증 전) — Sany 예시는 AI 점수만 있어 「AI 미검증」으로 표시됩니다 */
+  var AI_SCORES = { '예시-EX215S': [4, 3, 3, 3, 3, 3, 3, 3] };
+  var NOTES = {
+    '예시-EX230': { note_int_arch: '예시 — 대시보드·콘솔 층 구분이 뚜렷하고 개방감이 큼(가상 관찰)', note_ergonomics: '예시 — 슬림 필러로 측방 시야 양호(가상 관찰)' },
+    '예시-EX215S': { note_proportion: 'AI: 예시 — 각진 볼륨, 상하부 균형 보통(가상) (confidence 0.5)' }
   };
 
   var FORM = { '저중심 카운터웨이트': 'Low & wide', '라운드 후드': 'Soft round', '각진 볼륨': 'Faceted', '슬림 필러': 'Light & open', '후방 경사 후드': 'Sloped rear', '후방 소선회': 'Compact tail' };
@@ -158,7 +166,11 @@
         media: images(type, c, { views: r[8], wideCab: r[9] })
       };
       var sc = SCORES[r[2]];
-      if (sc) L.SCORE_AXES.forEach(function (a, k) { m[a.key] = sc[k]; });
+      if (sc) L.SCORE_AXES.forEach(function (a, k) { if (sc[k] != null) m[a.key] = sc[k]; });
+      var ai = AI_SCORES[r[2]];
+      if (ai) { L.SCORE_AXES.forEach(function (a, k) { m[a.aiKey] = ai[k]; }); m.prompt_version = L.EVAL_PROMPT_VERSION; }
+      var nt = NOTES[r[2]];
+      if (nt) Object.keys(nt).forEach(function (k) { m[k] = nt[k]; });
       if (r[1] === 'mecalac') m.product_class = 'Wheeled';
       return m;
     });
@@ -178,7 +190,7 @@
     db._sample = true;
     /* 운영 루프 시연: 주간 주기(2026-09-29 오후 수강생 답변), 한 주 전 갱신 기록 1건 */
     var weekAgo = L.toDateStr(new Date(base.getFullYear(), base.getMonth(), base.getDate() - 7));
-    db.ops = L.restoreOps({ cycle: 'weekly', stale_days: L.STALE_DAYS_DEFAULT, defaults: 2, last_update: weekAgo,
+    db.ops = L.restoreOps({ cycle: 'weekly', stale_days: L.STALE_DAYS_DEFAULT, defaults: 3, last_update: weekAgo,
       history: [{ date: weekAgo, cycle: 'weekly', steps_done: ['collect', 'qa'], note: '예시 — 1차 수집', models: 14 }] });
     return db;
   }

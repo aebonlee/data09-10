@@ -211,7 +211,20 @@ begin
   perform public._assert_eq((select column_default from information_schema.columns where table_name = 'workspace' and column_name = 'update_cycle'),
     '''weekly''::text', '업데이트 주기 기본값은 주간이다');
   perform public._assert_eq((select column_default from information_schema.columns where table_name = 'workspace' and column_name = 'stale_days'),
-    '5479', '오래된 자료 기준 기본값은 15년(5479일)이다');
+    '7305', '오래된 자료 기준 기본값은 수집일 기준 20년(7305일)이다 (2026-09-29 오후 늦게)');
+  -- 평가 8기준(1~5) — 디자이너 점수 · AI 점수 · 근거
+  insert into public.benchmark_model (model_id, equipment_type, brand, model_name, score_proportion, ai_proportion, note_proportion, score_identity)
+    values ('M0011', 'Excavator', 'JCB', '8기준', 5, 4, '비례 안정(가상)', 1);
+  perform public._assert(true, '8기준 점수 1~5 · AI 점수 · 근거가 저장된다');
+  perform public._assert_eq((select count(*)::text from information_schema.columns where table_name = 'benchmark_model' and column_name ~ '^(score|ai|note)_(proportion|form|ext_cmf|int_arch|int_cmf|ergonomics|hmi|identity)$'),
+    '24', '8기준 × (디자이너·AI·근거) = 24칸');
+  perform public._assert_raises($s$insert into public.benchmark_model (model_id, equipment_type, brand, model_name, score_hmi)
+     values ('M0012', 'Excavator', 'JCB', 'h0', 0)$s$,
+    '23514', '8기준 점수는 1~5 다 (평가 기준 자료의 5점 Scale — 0 은 막힌다)');
+  perform public._assert_raises($s$insert into public.benchmark_model (model_id, equipment_type, brand, model_name, ai_form)
+     values ('M0013', 'Excavator', 'JCB', 'a6', 6)$s$,
+    '23514', 'AI 점수도 1~5 다');
+  perform public._assert_eq((select score_exterior::text from public.benchmark_model where model_id = 'M0010'), '0', '예전 4축 점수 칸은 남아 있다(legacy)');
   update public.workspace set stale_days = 10958;
   perform public._assert_raises($s$update public.workspace set stale_days = 10959$s$, '23514', '오래된 자료 기준은 30년(10958일)까지다');
   perform public._assert_raises($s$insert into public.benchmark_scope (scope_id, equipment_type, tonnage_class, brands, purposes)

@@ -140,7 +140,7 @@
     return L.buildReport({
       type: st.settings.type, period: period(), mails: st.mails, items: L.markConflicts(itemsNow(tasks)), tasks: tasks,
       carry: carryNow(tasks), author: st.settings.author, title: st.settings.title, approved: st.approved || null,
-      now: nowStamp(), summaryOverride: st.summaryOverride
+      now: nowStamp(), summaryOverride: st.summaryOverride, projects: st.projects, boardStyle: st.settings.boardStyle || 'brief'
     });
   }
 
@@ -193,6 +193,7 @@
       rows.innerHTML = '';
       st.projects.forEach(function (pj, i) {
         rows.appendChild(h('div', { class: 'pj-row' },
+          field('Business Group', h('input', { type: 'text', value: pj.group || '', placeholder: '예: 건설기계', onchange: function (e) { pj.group = e.target.value.trim(); st.approved = null; save(); } })),
           field('프로젝트명', h('input', { type: 'text', value: pj.name, onchange: function (e) { pj.name = e.target.value.trim(); st.projects = L.cleanProjects(st.projects); save(); } })),
           field('키워드(쉼표로 구분)', h('input', { type: 'text', value: pj.keywords.join(', '), onchange: function (e) { pj.keywords = e.target.value.split(/[,，]/).map(function (x) { return x.trim(); }).filter(Boolean); save(); } })),
           h('button', { class: 'btn btn-sm btn-danger', type: 'button', onclick: function () { st.projects.splice(i, 1); save(); drawProjects(); } }, '삭제')));
@@ -211,9 +212,16 @@
           h('button', { class: 'btn btn-sm', type: 'button', onclick: function () { s.refDay = today(); st.approved = null; save(); render(); } }, '오늘'),
           h('button', { class: 'btn btn-sm', type: 'button', onclick: function () { s.refDay = p ? p.next.start : today(); st.approved = null; save(); render(); } }, '다음 기간'))),
       h('section', { class: 'card' }, h('h2', null, '프로젝트와 키워드'),
-        h('p', { class: 'note' }, '메일 제목·첨부 파일명·본문에 키워드가 있으면 그 프로젝트로 묶습니다. 제목의 [프로젝트명]과 같으면 가장 먼저 씁니다.'),
+        h('p', { class: 'note' }, '메일 제목·첨부 파일명·본문에 키워드가 있으면 그 프로젝트로 묶습니다. 제목의 [프로젝트명]과 같으면 가장 먼저 씁니다. Business Group 은 주간보고 양식 표의 첫 열(예: 건설기계·산업차량)에 들어갑니다.'),
         rows,
-        h('button', { class: 'btn', type: 'button', onclick: function () { st.projects.push({ name: '새 프로젝트', keywords: [] }); save(); drawProjects(); } }, '프로젝트 추가')),
+        h('button', { class: 'btn', type: 'button', onclick: function () { st.projects.push({ name: '새 프로젝트', keywords: [], group: '' }); save(); drawProjects(); } }, '프로젝트 추가')),
+      h('section', { class: 'card' }, h('h2', null, '주간보고 양식 표 문체'),
+        h('p', { class: 'note' }, '주간보고의 양식 표(Business Group · 프로젝트명 · 금주 실적 · 차주 계획)에 넣을 문장 모양입니다. 원래 문장은 아래 상세 절(01~03)에 그대로 남습니다.'),
+        h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '양식 표 문체' }, [['brief', '개조식(양식 샘플처럼)', '「~ 검토 완료」「~ 확인 필요」'], ['original', '메일 문장 그대로', '「~ 검토했습니다」']].map(function (o) {
+          return h('label', { class: 'opt' }, h('input', { type: 'radio', name: 'bstyle', value: o[0], checked: (s.boardStyle || 'brief') === o[0], onchange: function () { s.boardStyle = o[0]; st.approved = null; save(); } }),
+            h('span', null, h('span', { class: 't' }, o[1]), h('span', { class: 's' }, o[2])));
+        }))),
+      window.AIPanel ? AIPanel.settingsCard({ toast: toast, onChange: render }) : null,
       h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/input' }, '다음: 메일·자료 입력')));
   }
 
@@ -251,7 +259,8 @@
     return h('div', { class: 'alert info' }, h('strong', null, 'Outlook 메일을 이 도구로 가져오는 방법'),
       h('ul', null,
         h('li', null, '새 Outlook · 웹 Outlook: 메일을 열고 「…」 → 「다운로드」(또는 「다른 이름으로 저장」)를 누르면 .eml 로 저장됩니다.'),
-        h('li', null, '클래식 Outlook: 메일을 바탕화면으로 끌어 놓으면 .msg 가 됩니다. .msg 는 브라우저가 읽지 못하니, 「파일 → 다른 이름으로 저장 → 형식: 텍스트 전용(.txt)」으로 저장해 불러오거나 아래 「붙여 넣기」를 써 주세요.'),
+        h('li', null, '클래식 Outlook — 폴더째 한 번에(권장): 리포의 tools/outlook/Export-OutlookMail.ps1 을 내 PC 에서 실행하면, 고른 Outlook 메일 폴더(받은 편지함·하위 폴더)의 기간 안 메일을 .eml 로 저장합니다. 메일을 읽기만 하고 Outlook 안의 메일은 바꾸지 않습니다. 사용법: tools/outlook/README.md'),
+        h('li', null, '클래식 Outlook — 몇 통만: 메일을 바탕화면으로 끌어 놓으면 .msg 가 됩니다. .msg 는 브라우저가 읽지 못하니, 「파일 → 다른 이름으로 저장 → 형식: 텍스트 전용(.txt)」으로 저장해 불러오거나 아래 「붙여 넣기」를 써 주세요.'),
         h('li', null, '여러 통을 한 번에: 받은편지함에서 여러 메일을 골라 「첨부 파일로 전달」하면 받은 메일에 .eml 이 붙습니다(Outlook 설정에 따라 다름).')));
   }
   function viewInput() {
@@ -459,10 +468,11 @@
         h('div', { class: 'form-grid' }, field('분류', mCat), field('상태', mSt), field('프로젝트', mPj), field('근거 메일 ID', mEv)),
         field('내용', mTx), h('div', { class: 'btn-row' }, h('button', { class: 'btn', type: 'button', onclick: addManual }, '항목 추가'))),
       h('section', { class: 'card' }, h('h2', null, 'AI 반자동 추출'),
-        h('div', { class: 'alert warn' }, '외부 AI(ChatGPT 등)에 메일 내용을 붙여 넣기 전에 회사 보안정책에서 허용한 서비스인지 확인해 주세요(기획서 6.1·7.1). 사내 승인 AI(Azure OpenAI 등)가 있으면 그것을 써 주세요.'),
+        h('div', { class: 'alert warn' }, '외부 AI(ChatGPT 등)에 메일 내용을 붙여 넣기 전에 회사 보안정책에서 허용한 서비스인지 확인해 주세요(기획서 6.1·7.1). 사내 온프레미스 LLM 이 OpenAI 호환 API 를 열어 두었다면 「01 보고 설정 → AI 연결 설정」에 주소·모델을 넣고 「설정한 AI 서버로 보내기」를 쓰면 메일이 사내망 밖으로 나가지 않습니다.'),
         h('div', { class: 'btn-row' }, h('label', { class: 'opt' }, mask, h('span', null, h('span', { class: 't' }, '메일주소·전화번호 가리기'))), h('label', { class: 'opt' }, onlyIn, h('span', null, h('span', { class: 't' }, '보고 기간 안 메일만')))),
         h('ol', { class: 'steps' },
-          h('li', null, '아래 프롬프트를 복사해 AI 에 붙여 넣어 주세요. ', h('button', { class: 'btn btn-sm', type: 'button', onclick: function () { copyText(makePrompt()); } }, '프롬프트 복사')),
+          h('li', null, '아래 프롬프트를 복사해 AI 에 붙여 넣어 주세요. ', h('button', { class: 'btn btn-sm', type: 'button', onclick: function () { copyText(makePrompt()); } }, '프롬프트 복사'), ' ',
+            window.AIPanel ? AIPanel.sendButton('설정한 AI 서버로 보내기', makePrompt, function (t) { answerTa.value = t; readAnswer(); toast('AI 서버의 답을 읽었습니다. 아래 미리보기를 확인해 주세요.'); }, { toast: toast, settingsHref: '#/setup' }) : null),
           h('li', null, 'AI 가 준 JSON 답을 아래 칸에 붙여 넣고 「AI 답 읽기」를 눌러 주세요.'),
           h('li', null, '없는 메일 ID·허용 밖 값은 자동으로 걸러 「확인 필요」로 낮춥니다. 표에서 검토해 주세요.')),
         field('프롬프트', promptTa), field('AI 답', answerTa),

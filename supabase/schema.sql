@@ -273,6 +273,32 @@ alter table public.design_feedback add constraint design_feedback_target_check c
   ('overview', 'evaluation', 'brands', 'scores', 'sw', 'trend', 'note', 'compare', 'feedback', 'ops'));
 
 -- ----------------------------------------------------------------------------
+-- 1-e. 2026-09-29 오후 늦게 — 수강생 「BM Agent 평가 점수 기준 자료」 · 오래된 자료 20년
+--   · 평가 8기준(비중 15·15·10·15·10·15·10·10) × 디자이너 점수(score_*) · AI 점수(ai_*) · 근거/코멘트(note_*)
+--     척도는 자료의 5점 Scale(1 개선 필요 ~ 5 Benchmark 수준) → 1~5
+--   · 예전 4축 칸(score_exterior·score_cabin·score_cmf·score_service, 0~5)은 지우지 않고 남긴다(도구의 legacy_scores)
+--   · 오래된 자료 기준 기본값 20년(7305일) — 수집일 기준
+--   다시 실행해도 된다(칸은 if not exists, 제약은 지우고 다시 만든다).
+-- ----------------------------------------------------------------------------
+do $ev$
+declare c text;
+begin
+  foreach c in array array['proportion', 'form', 'ext_cmf', 'int_arch', 'int_cmf', 'ergonomics', 'hmi', 'identity']
+  loop
+    execute format('alter table public.benchmark_model add column if not exists %I int', 'score_' || c);
+    execute format('alter table public.benchmark_model add column if not exists %I int', 'ai_' || c);
+    execute format('alter table public.benchmark_model add column if not exists %I text not null default %L', 'note_' || c, '');
+    execute format('alter table public.benchmark_model drop constraint if exists %I', 'benchmark_model_score_' || c || '_check');
+    execute format('alter table public.benchmark_model add constraint %I check (%I between 1 and 5)', 'benchmark_model_score_' || c || '_check', 'score_' || c);
+    execute format('alter table public.benchmark_model drop constraint if exists %I', 'benchmark_model_ai_' || c || '_check');
+    execute format('alter table public.benchmark_model add constraint %I check (%I between 1 and 5)', 'benchmark_model_ai_' || c || '_check', 'ai_' || c);
+  end loop;
+end;
+$ev$;
+comment on column public.benchmark_model.score_exterior is '예전 4축(v0.2~v0.3) — 계산에 쓰지 않음. 2026-09-29 오후 늦게 8기준(score_proportion …)으로 바뀜';
+alter table public.workspace alter column stale_days set default 7305;
+
+-- ----------------------------------------------------------------------------
 -- 1-c. 과제 B — 업무보고 Agent (2026-09-29 추가)
 --
 --  설계: 메일 본문 원문은 DB 에 두지 않는다. 사내 메일은 기밀·개인정보가 섞여 있고

@@ -9,7 +9,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var SCHEMA_VERSION = 'rp-v0.1-stage1';
+  var SCHEMA_VERSION = 'rp-v0.2-stage1';  // v0.2: 주간보고 양식 표(Business Group · 프로젝트 · 금주 실적 · 차주 계획), 2026-09-29 오후 늦게
   var CATEGORIES = ['실적', '계획', '이슈'];
   var CATEGORY_EN = { '실적': 'Performance', '계획': 'Plan', '이슈': 'Issue' };
   /* 기획서 3.2 진행 상태 */
@@ -23,6 +23,7 @@
   var SECTIONS = {
     weekly: [
       { id: 'summary', name: '기간·요약' },
+      { id: 'board', name: '주간 업무보고 — 양식 표' },
       { id: 'performance', name: '01. Weekly Performance — 금주 주요 실적' },
       { id: 'plan', name: '02. Next Week Plan — 차주 주요 계획' },
       { id: 'issue', name: '03. Key Issues & Risks — 주요 이슈 및 리스크' },
@@ -207,13 +208,23 @@
       if (c === ',' && !q && !ang) { parts.push(cur); cur = ''; } else cur += c;
     }
     parts.push(cur);
-    return parts.map(function (p) {
-      p = trim(p); if (!p) return null;
+    var out = [];
+    parts.forEach(function (p) {
+      p = trim(p); if (!p) return;
+      // 주소 없이 이름만 「A; B」(Outlook 의 받는 사람 표시 — tools/outlook 내보내기)면 이름만 여러 명으로
+      if (p.indexOf('@') < 0 && p.indexOf('<') < 0) {
+        decodeHeaderValue(p).split(/\s*;\s*/).map(trim).filter(Boolean).forEach(function (nm) { out.push({ name: nm, email: '' }); });
+        return;
+      }
+      out.push(one(p));
+    });
+    return out;
+    function one(p) {
       var m = /^(.*)<([^>]+)>\s*$/.exec(p);
       var name = m ? trim(m[1]).replace(/^"|"$/g, '') : '', email = trim(m ? m[2] : p);
       name = decodeHeaderValue(name);
       return { name: name, email: email };
-    }).filter(Boolean);
+    }
   }
   var MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
   /* RFC 5322 날짜 → { iso(UTC), day(보낸 쪽 시간대의 날짜), time } */
@@ -275,7 +286,9 @@
     if (ct.value === 'message/rfc822') isAttach = true;
     if (isAttach) {
       var bytes = decodeTransfer(hb.body, enc);
-      acc.attachments.push({ name: fname || (ct.value === 'message/rfc822' ? '첨부 메일.eml' : '이름 없는 첨부'), type: ct.value, size: bytes.length });
+      // 내용 없이 이름만 담은 첨부(tools/outlook/Export-OutlookMail.ps1)는 Content-Disposition 의 size 매개변수(RFC 2183)로 크기를 적는다
+      var declared = Number(cd.params.size);
+      acc.attachments.push({ name: fname || (ct.value === 'message/rfc822' ? '첨부 메일.eml' : '이름 없는 첨부'), type: ct.value, size: bytes.length || (declared > 0 ? declared : 0) });
       return;
     }
     if (ct.value === 'text/plain' || ct.value === 'text/html') {
@@ -461,7 +474,7 @@
     return (list || []).map(function (p) {
       var name = trim(p.name);
       var kws = (Array.isArray(p.keywords) ? p.keywords : str(p.keywords).split(/[,，\n]/)).map(trim).filter(Boolean);
-      return name ? { name: name, keywords: uniq(kws) } : null;
+      return name ? { name: name, keywords: uniq(kws), group: trim(p.group) } : null;
     }).filter(Boolean);
   }
   function squash(s) { return str(s).toLowerCase().replace(/[\s\[\]【】()_\-·.,:]/g, ''); }
@@ -740,6 +753,122 @@
     return order.map(function (p) { return { project: p, items: map[p] }; });
   }
   /* state: { type, period, mails, items, tasks, carry, author, title, approved } */
+  /* ── 주간보고 양식 표 (2026-09-29 오후 늦게 — 수강생 제출 「주간업무보고 양식 샘플」의 구조) ──
+     열: Business Group | 프로젝트명 | 금주 실적 (기간) | 차주 계획 (기간)
+     금주 실적 칸: 진행 내용 · 결과물 배포일 · 이슈 사항 · 디자인 결과물 이미지
+     차주 계획 칸: 실행 예정 업무 · 일정 · 이슈 사항
+     문체: 명사로 끝나는 개조식(「~ 확정」「~ 검토 완료」「~ 확인 필요」). 양식 원본은 리포에 넣지 않았습니다(구조 설명: docs/source). */
+  var BOARD_LABELS = {
+    perf: ['진행 내용', '결과물 배포일', '이슈 사항', '디자인 결과물 이미지'],
+    plan: ['실행 예정 업무', '일정', '이슈 사항']
+  };
+  var IMAGE_RE = /\.(png|jpe?g|gif|bmp|webp|svg|tiff?|heic)$/i;
+  /* 메일 문장 → 개조식. 원래 항목 문장은 그대로 두고 표에만 씁니다 */
+  function boardStyle(text) {
+    var t = trim(text).replace(/\s+/g, ' ').replace(/[.。!]+$/, '').trim();
+    var tail = '', pm = /^(.*?[가-힣])\s*(\([^()]*\))$/.exec(t);          // 「…예정입니다(10/2까지)」 → 끝 괄호는 떼었다 붙임
+    if (pm) { t = pm[1]; tail = ' ' + pm[2]; }
+    t = t.replace(/^[가-힣]{1,6}님\s*,\s*/, '');                          // 「팀장님, 」 부르는 말
+    var rules = [
+      [/(부탁드립니다|부탁합니다|해\s?주시기 바랍니다|해\s?주세요)$/, ' 요청'],
+      [/(할|하게 될) 예정입니다$/, ' 예정'], [/예정입니다$/, ' 예정'],
+      [/하겠습니다$/, ' 예정'], [/드리겠습니다$/, ' 예정'],
+      [/마쳤습니다$/, ' 완료'],
+      [/(하|되)고 있습니다$/, ' 중'],
+      [/(했|하였|되었|됐)습니다$/, ''],
+      [/필요합니다$/, ' 필요'], [/중입니다$/, ' 중'], [/입니다$/, ''],
+      [/있습니다$/, ' 있음'], [/없습니다$/, ' 없음'],
+      [/(았|었|였)습니다$/, '음'],
+      [/(드립니다|합니다|됩니다)$/, ''], [/습니다$/, '음']
+    ];
+    for (var i = 0; i < rules.length; i++) { if (rules[i][0].test(t)) { t = t.replace(rules[i][0], rules[i][1]); break; } }
+    t = t.replace(/([가-힣A-Za-z0-9)\]]{2,})(을|를)(?=\s)/g, '$1')      // 「시안을 검토」 → 「시안 검토」
+      .replace(/([가-힣A-Za-z0-9)\]]{2,})(을|를)$/, '$1')
+      .replace(/\s+/g, ' ').trim()
+      .replace(/([가-힣]{2,})(이|가) (필요|없음|있음)$/, '$1 $3');        // 「확인이 필요」 → 「확인 필요」
+    return t + tail;
+  }
+  function dotDay(day) { return str(day).replace(/-/g, '.'); }
+  /* 주간 기간의 첫·마지막 평일 (양식 샘플이 월~금으로 적음) */
+  function workdayRange(p) {
+    if (!p) return null;
+    var s = p.start, e = p.end, g = 0;
+    while (s < e && (dow(s) === '토' || dow(s) === '일') && g++ < 7) s = addDays(s, 1);
+    g = 0;
+    while (e > s && (dow(e) === '토' || dow(e) === '일') && g++ < 7) e = addDays(e, -1);
+    return { start: s, end: e, label: dotDay(s) + ' ~ ' + dotDay(e) };
+  }
+  function dateSpan(days) {
+    var ds = uniq(days.filter(Boolean)).sort();
+    if (!ds.length) return '';
+    return ds.length === 1 ? ds[0] : ds[0] + ' ~ ' + ds[ds.length - 1];
+  }
+  /* rep: buildReport 결과, projects: 설정의 프로젝트(Business Group), mails, opts.style: 'brief'(개조식)|'original' */
+  function weeklyBoard(rep, projects, mails, opts) {
+    opts = opts || {};
+    var brief = opts.style !== 'original';
+    var fmt = function (x) { return brief ? boardStyle(x.text) : x.text; };
+    var mailById = {}; (mails || []).forEach(function (m) { mailById[m.id] = m; });
+    var pj = cleanProjects(projects), groupOf = {}, order = {};
+    pj.forEach(function (p, i) { groupOf[p.name] = p.group; order[p.name] = i; });
+    var names = uniq([].concat(rep.performance, rep.plan, rep.issue).map(function (g) { return g.project; }));
+    (rep.carry || []).forEach(function (c) { var f = c.final || c.suggest; if ((f === '이월' || f === '지연') && c.plan.project && names.indexOf(c.plan.project) < 0) names.push(c.plan.project); });
+    function itemsOf(list, name) { var g = list.filter(function (x) { return x.project === name; })[0]; return g ? g.items : []; }
+    var rows = names.map(function (name) {
+      var perf = itemsOf(rep.performance, name), plan = itemsOf(rep.plan, name), issue = itemsOf(rep.issue, name);
+      var ev = uniq([].concat.apply([], perf.concat(plan, issue).map(function (x) { return x.evidence; }))).sort();
+      var imgs = uniq([].concat.apply([], perf.map(function (x) { return [].concat.apply([], x.evidence.map(function (e) {
+        return ((mailById[e] && mailById[e].attachments) || []).map(function (a) { return a.name; }).filter(function (n) { return IMAGE_RE.test(n); });
+      })); })));
+      var carried = (rep.carry || []).filter(function (c) { var f = c.final || c.suggest; return (f === '이월' || f === '지연') && c.plan.project === name; });
+      return {
+        group: groupOf[name] || '', project: name, evidence: ev,
+        perf: {
+          progress: perf.map(function (x) { return fmt(x) + (x.status && x.status !== '완료' ? ' (' + x.status + ')' : ''); }),
+          release: dateSpan(perf.filter(function (x) { return x.status === '완료'; }).map(function (x) { return x.date; })),
+          issues: issue.map(function (x) { return fmt(x) + (x.decision ? ' (의사결정 필요)' : ''); }),
+          images: imgs
+        },
+        plan: {
+          tasks: plan.map(function (x) { return fmt(x) + (x.status === '확인 필요' ? ' (확인 필요)' : ''); }),
+          schedule: dateSpan(plan.map(function (x) { return x.date; })),
+          issues: carried.map(function (c) { return (c.final || c.suggest) + ': ' + (brief ? boardStyle(c.plan.text) : c.plan.text); })
+            .concat(issue.filter(function (x) { return x.decision; }).map(function (x) { return '의사결정 필요: ' + fmt(x); }))
+        }
+      };
+    });
+    rows.sort(function (a, b) {
+      var oa = order[a.project] == null ? 999 : order[a.project], ob = order[b.project] == null ? 999 : order[b.project];
+      return (a.project === OTHER_PROJECT) - (b.project === OTHER_PROJECT) || oa - ob || a.project.localeCompare(b.project);
+    });
+    var wr = workdayRange(rep.period), nr = rep.period && rep.period.next ? workdayRange({ start: rep.period.next.start, end: rep.period.next.end }) : null;
+    return {
+      style: brief ? 'brief' : 'original',
+      head: ['Business Group', '프로젝트명', '금주 실적' + (wr ? ' (' + wr.label + ')' : ''), '차주 계획' + (nr ? ' (' + nr.label + ')' : '')],
+      rows: rows
+    };
+  }
+  /* 양식 칸 한 개의 줄들 — 「- 진행 내용: …」 식. 여러 건이면 이어서 적고, 없으면 「-」 */
+  function boardCellLines(row, side) {
+    var L = BOARD_LABELS[side], c = row[side], out = [];
+    function list(label, arr) {
+      if (!arr.length) { out.push('- ' + label + ': -'); return; }
+      if (arr.length === 1) { out.push('- ' + label + ': ' + arr[0]); return; }
+      out.push('- ' + label + ':'); arr.forEach(function (x) { out.push('  · ' + x); });
+    }
+    if (side === 'perf') {
+      list(L[0], c.progress);
+      out.push('- ' + L[1] + ': ' + (c.release || '-'));
+      list(L[2], c.issues);
+      out.push('- ' + L[3] + ': ' + (c.images.length ? '첨부 ' + c.images.join(', ') + ' (보고서에 넣어 주세요)' : '(여기에 디자인 결과물 이미지 삽입)'));
+    } else {
+      list(L[0], c.tasks);
+      out.push('- ' + L[1] + ': ' + (c.schedule || '-'));
+      list(L[2], c.issues);
+    }
+    return out;
+  }
+
   function buildReport(state) {
     var period = state.period, mails = state.mails || [], items = (state.items || []).filter(function (x) { return !x.excluded; });
     var mailById = {}; mails.forEach(function (m) { mailById[m.id] = m; });
@@ -776,10 +905,15 @@
       period: period, approved: state.approved || null, generated: state.now || '',
       summary: state.summaryOverride ? str(state.summaryOverride).split(/\n/).filter(Boolean) : summary,
       performance: byProject(perf), plan: byProject(plan), issue: byProject(issue),
-      decision: issue.filter(function (x) { return x.decision; }), status: status, carry: carry,
+      decision: issue.filter(function (x) { return x.decision; }), status: status, carry: carry, projects: state.projects || [], boardStyle: state.boardStyle || 'brief',
       counts: { performance: perf.length, plan: plan.length, issue: issue.length, check: check.length, mails: used.length },
       evidence: used.map(function (id) { var m = mailById[id]; return { id: id, day: m.day, time: m.time, from: m.from ? (m.from.name || m.from.email) : '', subject: m.subject, attachments: (m.attachments || []).map(function (a) { return a.name; }), file: m.file || '' }; })
     };
+  }
+  /* 양식 표는 보고서가 다 만들어진 뒤(이전 계획 판정 포함) 계산합니다 */
+  function boardOf(rep) {
+    if (!rep._board) rep._board = weeklyBoard(rep, rep.projects, rep.evidence.map(function (e) { return { id: e.id, attachments: e.attachments.map(function (n) { return { name: n }; }) }; }), { style: rep.boardStyle });
+    return rep._board;
   }
   function reportTitle(rep) {
     var t = rep.type === 'monthly' ? '월간 업무보고' : '주간 업무보고';
@@ -797,6 +931,7 @@
   function itemLine(x) { return x.text + (x.date && x.category === '계획' ? ' (' + x.date + ')' : '') + (x.status && x.category !== '계획' ? ' [' + x.status + ']' : ''); }
   /* 화면·Word(HTML)·인쇄가 함께 쓰는 본문 */
   var REPORT_CSS = [
+    '.rp table.board td{white-space:normal;min-width:110px}.rp table.board td:nth-child(3),.rp table.board td:nth-child(4){min-width:240px}',
     '.rp{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#16202c;line-height:1.6;word-break:keep-all;overflow-wrap:break-word}',
     '.rp h1{font-size:20pt;margin:0 0 4pt}.rp h2{font-size:13pt;margin:16pt 0 6pt;border-bottom:1.5pt solid #0f2544;padding-bottom:2pt}',
     '.rp h3{font-size:11pt;margin:10pt 0 4pt;color:#0f2544}.rp .meta{color:#56616f;font-size:9.5pt}',
@@ -821,6 +956,15 @@
     }).join('');
   }
   function sectionHtml(rep, id, opts) {
+    if (id === 'board') {
+      var bd = boardOf(rep);
+      if (!bd.rows.length) return '<p class="meta">해당 항목이 없습니다.</p>';
+      return '<table class="board"><tr>' + bd.head.map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr>' + bd.rows.map(function (r) {
+        return '<tr><td>' + esc(r.group || '-') + '</td><td>' + esc(r.project) + '</td><td>' + boardCellLines(r, 'perf').map(esc).join('<br>') + '</td><td>' +
+          boardCellLines(r, 'plan').map(esc).join('<br>') + (r.evidence.length ? '<br><span class="meta">근거 </span>' + r.evidence.map(function (e) { return '<a class="ev" href="' + esc((opts.linkBase || '#ev-') + e) + '">' + esc(e) + '</a>'; }).join('') : '') + '</td></tr>';
+      }).join('') + '</table><p class="meta">주간업무보고 양식(웹보드 샘플)의 열 구성입니다. ' + (bd.style === 'brief' ? '문장은 개조식으로 줄였고 원문은 아래 01~03 에 있습니다. ' : '') +
+        'Business Group 은 「01 보고 설정」의 프로젝트마다 적습니다. 결과물 배포일은 완료 실적의 근거 메일 날짜(배포일이 따로 있으면 고쳐 주세요), 차주 이슈는 이전 계획 중 이월·지연과 의사결정이 필요한 이슈입니다.</p>';
+    }
     if (id === 'summary') return '<ul>' + rep.summary.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>';
     if (id === 'performance') return itemsHtml(rep.performance, opts);
     if (id === 'plan') return (rep.period ? '<p class="meta">대상 기간: ' + esc(rep.period.next.label) + '</p>' : '') + itemsHtml(rep.plan, opts);
@@ -887,7 +1031,7 @@
     return '<w:p>' + (ppr ? '<w:pPr>' + ppr + '</w:pPr>' : '') + (Array.isArray(runs) ? runs.join('') : runs) + '</w:p>';
   }
   function wTable(header, rows) {
-    var cell = function (t, head) { return '<w:tc><w:tcPr>' + (head ? '<w:shd w:val="clear" w:color="auto" w:fill="EEF2F7"/>' : '') + '</w:tcPr>' + wPara(wRun(t, { b: head, sz: 18 })) + '</w:tc>'; };
+    var cell = function (t, head) { return '<w:tc><w:tcPr>' + (head ? '<w:shd w:val="clear" w:color="auto" w:fill="EEF2F7"/>' : '') + '</w:tcPr>' + (Array.isArray(t) ? (t.length ? t : ['']) : [t]).map(function (ln) { return wPara(wRun(ln, { b: head, sz: 18 })); }).join('') + '</w:tc>'; };
     var b = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (s) { return '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="B8C2CF"/>'; }).join('') + '</w:tblBorders>';
     return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>' + b + '</w:tblPr>' +
       '<w:tr>' + header.map(function (x) { return cell(x, true); }).join('') + '</w:tr>' +
@@ -914,6 +1058,7 @@
     (SECTIONS[rep.type] || SECTIONS.weekly).forEach(function (s) {
       out.push(wPara(wRun(s.name, { b: true, sz: 26 }), { spaceBefore: 280, border: true }));
       if (s.id === 'summary') rep.summary.forEach(function (t) { out.push(wPara(wRun('• ' + t), { indent: 360 })); });
+      else if (s.id === 'board') { var bd = boardOf(rep); out.push(bd.rows.length ? wTable(bd.head, bd.rows.map(function (r) { return [r.group || '-', r.project, boardCellLines(r, 'perf'), boardCellLines(r, 'plan').concat(r.evidence.length ? ['근거 ' + r.evidence.join(', ')] : [])]; })) : wPara(wRun('해당 항목이 없습니다.', { color: '56616F' }))); }
       else if (s.id === 'performance') out = out.concat(docxItems(rep.performance));
       else if (s.id === 'plan') { if (rep.period) out.push(wPara(wRun('대상 기간: ' + rep.period.next.label, { sz: 18, color: '56616F' }))); out = out.concat(docxItems(rep.plan)); }
       else if (s.id === 'issue') out.push(rep.issue.length ? wTable(['프로젝트', '이슈 · 현황', '상태', '의사결정', '근거'], [].concat.apply([], rep.issue.map(function (g) { return g.items.map(function (x) { return [g.project, x.text + (x.conflict ? ' — ' + x.conflict : ''), x.status, x.decision ? '필요' : '', x.evidence.join(', ')]; }); }))) : wPara(wRun('해당 항목이 없습니다.', { color: '56616F' })));
@@ -954,12 +1099,17 @@
     var sumRows = [['항목', '값'], ['보고서', reportTitle(rep)], ['유형', rep.type === 'monthly' ? '월간' : '주간'], ['기간', rep.period ? rep.period.start + ' ~ ' + rep.period.end : ''],
       ['상태', rep.approved ? '승인 ' + rep.approved : '초안'], ['실적', rep.counts.performance], ['계획', rep.counts.plan], ['이슈', rep.counts.issue], ['확인 필요', rep.counts.check], ['근거 메일', rep.counts.mails]]
       .concat(rep.summary.map(function (s, i) { return ['요약 ' + (i + 1), s]; }));
-    return [{ name: '요약', aoa: sumRows }, { name: '업무항목', aoa: rows }, { name: '업무그룹', aoa: taskRows }, { name: '근거메일', aoa: mailRows }, { name: '이전계획대비', aoa: carryRows }];
+    var out = [{ name: '요약', aoa: sumRows }];
+    if (rep.type !== 'monthly') {
+      var bd = boardOf(rep);
+      out.push({ name: '주간보고표', aoa: [bd.head.concat(['근거 메일'])].concat(bd.rows.map(function (r) { return [r.group, r.project, boardCellLines(r, 'perf').join('\n'), boardCellLines(r, 'plan').join('\n'), r.evidence.join(', ')]; })) });
+    }
+    return out.concat([{ name: '업무항목', aoa: rows }, { name: '업무그룹', aoa: taskRows }, { name: '근거메일', aoa: mailRows }, { name: '이전계획대비', aoa: carryRows }]);
   }
 
   /* ── 저장 형태 ───────────────────────── */
   function emptyState() {
-    return { schema: SCHEMA_VERSION, settings: { type: 'weekly', refDay: '', weekStart: 1, author: '', title: '' }, projects: [], mails: [], items: [], prevPlansText: '', carryFinal: {}, taskProject: {}, history: [], summaryOverride: '', approved: null, _sample: false };
+    return { schema: SCHEMA_VERSION, settings: { type: 'weekly', refDay: '', weekStart: 1, author: '', title: '', boardStyle: 'brief' }, projects: [], mails: [], items: [], prevPlansText: '', carryFinal: {}, taskProject: {}, history: [], summaryOverride: '', approved: null, _sample: false };
   }
   function restoreState(p) {
     var s = emptyState();
@@ -1009,6 +1159,7 @@
     parsePlanLines: parsePlanLines, carryOver: carryOver,
     buildReport: buildReport, reportTitle: reportTitle, flagText: flagText, reportBodyHtml: reportBodyHtml, reportWordHtml: reportWordHtml, reportHtml: reportHtml,
     docxParts: docxParts, reportSheets: reportSheets,
+    BOARD_LABELS: BOARD_LABELS, boardStyle: boardStyle, workdayRange: workdayRange, weeklyBoard: weeklyBoard, boardCellLines: boardCellLines, boardOf: boardOf,
     emptyState: emptyState, restoreState: restoreState, historyEntry: historyEntry, plansFromHistory: plansFromHistory
   };
 });

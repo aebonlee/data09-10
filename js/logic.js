@@ -8,7 +8,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var SCHEMA_VERSION = 'v0.3-stage1';  // v0.2: 평가 점수 4축 추가(2026-09-29) · v0.3: 점수 척도 0~5(2026-09-29 오후)
+  var SCHEMA_VERSION = 'v0.4-stage1';  // v0.2: 평가 점수 4축 추가(2026-09-29) · v0.3: 점수 척도 0~5(2026-09-29 오후) · v0.4: 평가 기준 자료의 8기준·가중치·1~5 척도(2026-09-29 오후 늦게)
 
   /* ── 부록 B. 경쟁사 Selection Universe (제출 13개사 + 2026-09-29 수강생 요청 Mecalac = 14개사)
      개수는 어디서도 숫자로 적지 않고 BRANDS.length 로 셉니다. ── */
@@ -87,6 +87,7 @@
     { id: 'cmf', name: 'CMF', kind: 'obs' },
     { id: 'engineering', name: 'Engineering', kind: 'fact' },
     { id: 'service', name: 'Service / Safety', kind: 'obs' },
+    { id: 'evaluation', name: 'Design Evaluation — 8기준', kind: 'obs' },
     { id: 'evidence', name: 'AI / Evidence', kind: 'meta' },
     { id: 'scope', name: 'Benchmark Scope', kind: 'meta' }
   ];
@@ -119,7 +120,6 @@
     F('surface_edge', 'Surface / Edge', 'design', 'text', { syn: ['surface_edge', '면처리', '엣지'] }),
     F('proportion', 'Proportion', 'design', 'text', { syn: ['proportion', '비례'] }),
     F('design_tags', 'Design Tags', 'design', 'tags', { syn: ['design_tags', 'tags', '태그', '디자인태그'] }),
-    F('score_exterior', 'Exterior 평가(0~5)', 'design', 'score', { syn: ['score_exterior', 'exterior평가', '외관평가', '외관점수'] }),
 
     F('glass_area', 'Glass Area', 'cabin', 'text', { syn: ['glass_area', '유리면적', '글라스'] }),
     F('pillar_design', 'Pillar Design', 'cabin', 'text', { syn: ['pillar_design', '필러'] }),
@@ -129,7 +129,6 @@
     F('seat', 'Seat', 'cabin', 'text', { syn: ['seat', '시트'] }),
     F('display', 'Display', 'cabin', 'text', { syn: ['display', '디스플레이', '모니터'] }),
     F('hvac', 'HVAC', 'cabin', 'text', { syn: ['hvac', '공조'] }),
-    F('score_cabin', 'Cabin/HMI 평가(0~5)', 'cabin', 'score', { syn: ['score_cabin', 'cabin평가', '캐빈평가', '캐빈점수'] }),
 
     F('main_color', 'Main Color', 'cmf', 'text', { syn: ['main_color', '메인컬러', '주색상', '주조색'] }),
     F('accent_color', 'Accent Color', 'cmf', 'text', { syn: ['accent_color', '포인트컬러', '보조색', '강조색'] }),
@@ -138,7 +137,6 @@
     F('finish', 'Finish', 'cmf', 'text', { syn: ['finish', '마감'] }),
     F('gloss', 'Gloss', 'cmf', 'text', { syn: ['gloss', '광택'] }),
     F('texture', 'Texture', 'cmf', 'text', { syn: ['texture', '질감', '텍스처'] }),
-    F('score_cmf', 'CMF 평가(0~5)', 'cmf', 'score', { syn: ['score_cmf', 'cmf평가', 'cmf점수'] }),
 
     F('operating_weight', '운전중량', 'engineering', 'number', { unit: 'kg', qty: 'weight', syn: ['operating_weight', '운전중량', '중량', '장비중량', 'weight'] }),
     F('engine_power', '엔진 출력', 'engineering', 'number', { unit: 'kW', qty: 'power', syn: ['engine_power', '엔진출력', '출력', '정격출력', 'power'] }),
@@ -152,7 +150,6 @@
     F('sensor_camera', 'Sensor / Camera', 'service', 'text', { syn: ['sensor_camera', '센서', '카메라'] }),
     F('safety_label', 'Safety Label', 'service', 'text', { syn: ['safety_label', '안전라벨', '안전표시'] }),
     F('access', 'Access (Step·Handrail)', 'service', 'text', { syn: ['access', '승하차', '스텝'] }),
-    F('score_service', 'Service/Safety 평가(0~5)', 'service', 'score', { syn: ['score_service', 'service평가', '정비평가', '정비점수'] }),
 
     F('obs_origin', '관찰 입력 출처', 'evidence', 'select', { options: OBS_ORIGIN, syn: ['obs_origin', '관찰출처'] }),
     F('confidence', 'Confidence (0~1)', 'evidence', 'number', { syn: ['confidence', '신뢰점수'] }),
@@ -182,15 +179,62 @@
     { key: 'media', label: '이미지(경로 또는 파일)' }
   ];
 
-  /* 평가 점수 4축 — 아래 「2026-09-29 추가」 참고. 척도 0~5(2026-09-29 오후 수강생 답변) */
-  var SCORE_MIN = 0, SCORE_MAX = 5;
-  var SCORE_OPTIONS = ['0', '1', '2', '3', '4', '5'];
-  var SCORE_AXES = [
-    { key: 'score_exterior', axis: 'Exterior', name: 'Exterior 조형' },
-    { key: 'score_cabin', axis: 'Cabin', name: 'Cabin / HMI' },
-    { key: 'score_cmf', axis: 'CMF', name: 'CMF' },
-    { key: 'score_service', axis: 'Service', name: 'Service / Safety' }
+  /* ── 디자인 평가 8기준 (2026-09-29 오후 늦게 — 수강생 제출 「BM Agent 평가 점수 기준 자료」) ──
+     「건설장비 디자인 벤치마킹 평가기준 및 평가표 — 8-Criteria Design Evaluation Framework」의
+     8가지 핵심 평가 기준·권장 비중(합계 100%)·5점 평가 Scale 을 그대로 옮겼습니다. 구조 설명: docs/source/2026-09-29_BM평가기준_구조.md
+     예전 4축(Exterior·Cabin/HMI·CMF·Service, 가정)은 이 8기준으로 바뀌었습니다. 예전 점수는 legacy_scores 에 남겨 두고 계산에는 쓰지 않습니다. */
+  var RUBRIC_VERSION = 'BM-8C v1 (2026-09-29 평가 기준 자료)';
+  var SCORE_MIN = 1, SCORE_MAX = 5;
+  var SCORE_LEVELS = [
+    { value: 1, label: '개선 필요', meaning: '경쟁 대비 명확한 약점 또는 사용성/조형상 문제 존재' },
+    { value: 2, label: '기본 수준', meaning: '기능 및 조형은 기본 수준이나 경쟁 차별성이 낮음' },
+    { value: 3, label: '경쟁 평균', meaning: '동급 경쟁 제품의 일반적인 수준' },
+    { value: 4, label: '우수', meaning: '경쟁 대비 강점이 명확하고 참고 가치가 높음' },
+    { value: 5, label: 'Benchmark 수준', meaning: '해당 영역에서 대표적인 기준 사례로 활용할 가치가 높음' }
   ];
+  var SCORE_OPTIONS = SCORE_LEVELS.map(function (l) { return { value: String(l.value), label: l.value + ' ' + l.label }; });
+  function C(no, id, name, ko, weight, group, purpose, items, checks) {
+    return { no: no, id: id, key: 'score_' + id, aiKey: 'ai_' + id, noteKey: 'note_' + id, axis: 'C' + no + ' ' + ko, name: name, ko: ko,
+      weight: weight, group: group, purpose: purpose, items: items, checks: checks };
+  }
+  var SCORE_AXES = [
+    C(1, 'proportion', 'Exterior Proportion & Stance', '비례·자세', 15, 'Exterior', '장비의 첫인상과 전체 조형 비례를 평가합니다.',
+      'Overall Proportion / Upper-Lower Balance / Cabin Proportion / Counterweight / Boom & Arm Relationship / Stance',
+      ['차체 전체 비례가 안정적인가?', 'Upper Structure와 Undercarriage의 시각적 균형이 적절한가?', 'Cabin, Counterweight, Boom/Arm의 크기 관계가 조화로운가?', '장비가 Robust / Stable / Dynamic 중 어떤 성격으로 읽히는가?']),
+    C(2, 'form', 'Exterior Form & Surface Quality', '형태·면 품질', 15, 'Exterior', '기능 중심의 건설장비에서 조형적 완성도를 평가합니다.',
+      'Character Line / Surface Tension / Chiseled vs Organic / Edge / Fillet / Parting Line / Functional Integration',
+      ['기능부품이 전체 디자인과 조형적으로 통합되어 있는가?', 'Surface의 긴장감과 면 전환이 명확한가?', 'Character Line이 장비의 방향성과 브랜드 이미지를 강화하는가?', '엣지, 라운드, 파팅 등의 마감 수준이 일관적인가?']),
+    C(3, 'ext_cmf', 'Exterior CMF & Brand Expression', '외장 CMF', 10, 'Exterior', '브랜드 Color Identity와 CMF 전략을 평가합니다.',
+      'Main Color / Accent / Underbody / Color Break-up / Graphic / Material / Gloss / Matte / Texture',
+      ['브랜드 고유의 컬러가 명확하게 인식되는가?', 'Main / Accent / Underbody의 색상 비율이 조화로운가?', 'Graphic / Decal이 디자인을 강화하는가?', '도장·재질·광택이 Robust / Premium 이미지와 일관되는가?']),
+    C(4, 'int_arch', 'Interior Architecture & Styling', '실내 구성', 15, 'Interior', 'Interior를 단순한 기능 공간이 아니라 Styling 대상으로 평가합니다.',
+      'Dashboard Architecture / Console / Door Trim / Seat / Armrest / Ceiling / Floor / Storage / Layering / Visual Openness',
+      ['Dashboard와 Console의 구조가 시각적으로 정돈되어 있는가?', '기능 요소가 지나치게 복잡하게 보이지 않는가?', 'Cabin이 넓고 개방적으로 느껴지는가?', '건설장비다운 Robustness와 감성 품질이 균형을 이루는가?']),
+    C(5, 'int_cmf', 'Interior CMF & Perceived Quality', '실내 CMF', 10, 'Interior', '운전자가 실제로 접하는 Interior의 감성 품질을 평가합니다.',
+      'Color / Material / Texture / Stitching / Surface / Gloss / Soft Touch / Premium / Robust / Functional',
+      ['Color & Material의 조화가 좋은가?', 'Touch Point의 소재와 마감이 적절한가?', 'Texture와 Gloss 수준이 장비의 성격과 맞는가?', '전체 Interior가 Premium / Robust / Functional 중 어떤 이미지로 인식되는가?']),
+    C(6, 'ergonomics', 'Ergonomics & Operator Usability', '인간공학', 15, 'Usability', '장시간 조작을 전제로 사용성과 인간공학을 평가합니다.',
+      'Entry / Exit / Seating / Posture / Visibility / Reach / Control Flow / Work Environment / Service Interaction',
+      ['Step / Handrail / Door를 통한 승하차가 자연스러운가?', 'Seat / Armrest / Joystick의 위치가 적절한가?', '전방·측방·후방 시야와 Ground Visibility가 충분한가?', '주요 조작부까지의 Reach와 동선이 직관적인가?', '장시간 작업에서 반복 동작과 피로를 줄일 수 있는가?']),
+    C(7, 'hmi', 'HMI & Control Integration', 'HMI', 10, 'Usability', '조작 편의성과 HMI 가 Interior Styling 과 얼마나 잘 통합되는지 평가합니다.',
+      'Display / Joystick / Switch / Information Hierarchy / Control Layout / Physical-Digital Balance / HMI-Styling Integration',
+      ['디스플레이 위치와 크기가 운전자의 시야에 적절한가?', 'Primary / Secondary Control이 논리적으로 그룹화되어 있는가?', '조작계가 시각적으로 복잡하지 않은가?', 'Digital HMI와 물리 조작계가 Interior Styling과 자연스럽게 통합되는가?']),
+    C(8, 'identity', 'Design Identity & Differentiation', '아이덴티티', 10, 'Identity', '앞선 7개 평가를 종합해 브랜드 아이덴티티와 경쟁 차별성을 평가합니다.',
+      'Brand Identity / Family Look / Signature Element / Consistency / Differentiation / Memorability / Future Orientation',
+      ['장비를 보지 않고도 브랜드를 연상할 수 있는 요소가 있는가?', '동일 브랜드 제품군 간 Family Look이 일관적인가?', '경쟁사와 구별되는 Signature가 명확한가?', '전체 디자인 언어가 하나의 일관된 메시지를 전달하는가?', '향후 세대에서도 지속 가능한 디자인 언어인가?'])
+  ];
+  var LEGACY_SCORE_KEYS = ['score_exterior', 'score_cabin', 'score_cmf', 'score_service'];
+  /* 평가 블록 칸 — 기준마다 디자이너 점수(Designer Validation) · AI 점수(AI Analysis) · 근거/코멘트 (평가 기준 자료 5·6절) */
+  (function () {
+    var at = FIELDS.map(function (f) { return f.key; }).indexOf('obs_origin');
+    var add = [];
+    SCORE_AXES.forEach(function (a) {
+      add.push(F(a.key, 'C' + a.no + ' ' + a.name + ' — 디자이너(1~5)', 'evaluation', 'score', { crit: a.id, role: 'designer', syn: [a.key, a.name, 'c' + a.no, a.ko] }));
+      add.push(F(a.aiKey, 'C' + a.no + ' AI 점수(1~5)', 'evaluation', 'score', { crit: a.id, role: 'ai', syn: [a.aiKey, 'ai c' + a.no, 'ai ' + a.ko] }));
+      add.push(F(a.noteKey, 'C' + a.no + ' 근거 / 코멘트', 'evaluation', 'text', { crit: a.id, role: 'note', syn: [a.noteKey, 'c' + a.no + ' 근거', a.ko + ' 근거'] }));
+    });
+    Array.prototype.splice.apply(FIELDS, [at, 0].concat(add));
+  })();
 
   function fieldByKey(k) { return FIELDS.filter(function (f) { return f.key === k; })[0] || null; }
   function fieldsOf(block) { return FIELDS.filter(function (f) { return f.block === block; }); }
@@ -400,7 +444,12 @@
       m[k] = n == null ? '' : n;
     });
     if (m.confidence !== '' && (m.confidence < 0 || m.confidence > 1)) m.confidence = '';
-    SCORE_AXES.forEach(function (a) { m[a.key] = cleanScore(m[a.key]); });
+    /* 예전 4축 점수(v0.2~v0.3)는 계산에 쓰지 않고 legacy_scores 로 옮겨 둡니다(지우지 않음) */
+    LEGACY_SCORE_KEYS.forEach(function (k) {
+      if (m[k] !== '' && m[k] != null) { var ls = m.legacy_scores && typeof m.legacy_scores === 'object' ? m.legacy_scores : {}; ls[k.replace('score_', '')] = m[k]; m.legacy_scores = ls; }
+      delete m[k];
+    });
+    SCORE_AXES.forEach(function (a) { m[a.key] = cleanScore(m[a.key]); m[a.aiKey] = cleanScore(m[a.aiKey]); m[a.noteKey] = str(m[a.noteKey]); });
     if (m.tonnage_class && p) m.tonnage_class = tonnageFromText(p.name, m.tonnage_class) || m.tonnage_class;
     if (!m.tonnage_class && p && m.operating_weight !== '') m.tonnage_class = suggestTonnage(p.name, m.operating_weight);
     m.collected_at = toDateStr(m.collected_at) || str(m.collected_at);
@@ -503,7 +552,7 @@
     if (v === '' || v == null) return '';
     if (f.key === 'tonnage_class') { var c = tonnageClass(m.equipment_type, v); return c ? c.name : String(v); }
     if (f.unit) return formatNum(v) + ' ' + f.unit;
-    if (f.type === 'score') return v + ' / ' + SCORE_MAX;
+    if (f.type === 'score') { var lv = SCORE_LEVELS.filter(function (l) { return l.value === v; })[0]; return v + ' / ' + SCORE_MAX + (lv ? ' (' + lv.label + ')' : ''); }
     return String(v);
   }
   function formatNum(n) {
@@ -738,21 +787,37 @@
      여기 있는 함수는 화면과 무관한 계산만 합니다. 기준: 기획서 v0.2 「2026-09-29 수강생 추가 요청」 절
      ══════════════════════════════════════════════════════════════════ */
 
-  /* ── 평가 점수 4축 (디자이너 평가 0~5, OBSERVATION) ──
-     2026-09-29 오후 수강생 답변: 「디자인 평가 지표·점수는 0~5점 구성」 → 1~5 에서 0~5 로 넓혔습니다.
-     예전에 넣은 1~5 점수는 그대로 유효합니다(범위 안). 0 은 「점수 0」이고 빈칸(평가 안 함)과 다릅니다.
-     제출 기획서 5절 4대 분석축(Exterior·Cabin·CMF·Engineering) 중 Engineering 은 제원(FACT)으로 비교하므로
-     점수 축에서 빼고, 보조축 Serviceability/Safety 를 넣었습니다(가정 — 기획서 11장 「정한 것과 남은 확인 사항」 1번). */
+  /* ── 평가 점수 (1~5, OBSERVATION) ──
+     2026-09-29 오후 늦게: 수강생이 올린 평가 기준 자료의 5점 Scale(1 개선 필요 ~ 5 Benchmark 수준)로 바꿨습니다.
+     (오후 답변의 「0~5」는 이 자료가 오기 전의 말이라 자료를 따릅니다. 0 이 필요하면 기획서 11장 남은 확인 1번)
+     기준마다 디자이너 점수(Designer Validation)와 AI 점수(AI Analysis)를 따로 두고,
+     최종 점수 = 디자이너 점수가 있으면 그것, 없으면 AI 점수(「AI 미검증」으로 셈) — 평가 기준 자료 6절. */
   function cleanScore(v) {
     if (v === '' || v == null) return '';
     var n = Number(String(v).replace(/[^\d.\-]/g, ''));
-    if (!isFinite(n) || n < SCORE_MIN || n > SCORE_MAX) return '';
+    if (String(v).replace(/[^\d.\-]/g, '') === '' || !isFinite(n) || n < SCORE_MIN || n > SCORE_MAX) return '';
     return Math.round(n);
   }
+  function validScore(v) { return typeof v === 'number' && v >= SCORE_MIN && v <= SCORE_MAX ? v : null; }
+  function axisOf(key) { return SCORE_AXES.filter(function (a) { return a.key === key || a.id === key || a.aiKey === key; })[0] || null; }
+  /* 기준 하나의 최종 점수 */
   function scoreOf(m, key) {
-    var v = m[key];
-    return typeof v === 'number' && v >= SCORE_MIN && v <= SCORE_MAX ? v : null;
+    var a = axisOf(key); if (!a) return null;
+    var d = validScore(m[a.key]);
+    return d != null ? d : validScore(m[a.aiKey]);
   }
+  function scoreSource(m, key) {
+    var a = axisOf(key); if (!a) return '';
+    return validScore(m[a.key]) != null ? 'designer' : validScore(m[a.aiKey]) != null ? 'ai' : '';
+  }
+  /* 가중 점수 — 평가한 기준의 비중으로 다시 나눕니다(빈 기준이 0 점처럼 끌어내리지 않게). coverage = 평가한 비중 합(%) */
+  function weightedScore(scores) {
+    var sw = 0, sum = 0;
+    SCORE_AXES.forEach(function (a) { var v = scores[a.key]; if (typeof v === 'number') { sw += a.weight; sum += a.weight * v; } });
+    return { value: sw ? Math.round(sum / sw * 100) / 100 : null, coverage: sw };
+  }
+  function modelScores(m) { var sc = {}; SCORE_AXES.forEach(function (a) { sc[a.key] = scoreOf(m, a.key); }); return sc; }
+  function levelLabel(v) { var l = SCORE_LEVELS.filter(function (x) { return x.value === Math.round(v); })[0]; return l ? l.label : ''; }
   function round1(n) { return n == null ? null : Math.round(n * 10) / 10; }
   function round2(n) { return n == null ? null : Math.round(n * 100) / 100; }
   function mean(list) {
@@ -789,13 +854,12 @@
       var mine = models.filter(function (m) { return m.brand === b; });
       var scores = {};
       SCORE_AXES.forEach(function (a) { scores[a.key] = round2(mean(mine.map(function (m) { return scoreOf(m, a.key); }))); });
-      var axisVals = SCORE_AXES.map(function (a) { return scores[a.key]; }).filter(function (x) { return x != null; });
       var weights = mine.map(function (m) { return m.operating_weight === '' ? null : Number(m.operating_weight) / 1000; }).filter(function (x) { return x != null && isFinite(x); });
       var years = mine.map(function (m) { return Number(m.release_year); }).filter(function (x) { return x > 1900; });
       return {
         brand: b, short: brandShort(b), models: mine.length,
         scored: mine.filter(function (m) { return SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
-        scores: scores, overall: round2(mean(axisVals)),
+        scores: scores, overall: weightedScore(scores).value,
         weight: weights.length ? { min: round1(Math.min.apply(null, weights)), max: round1(Math.max.apply(null, weights)) } : null,
         power: round1(mean(mine.map(function (m) { return m.engine_power === '' ? null : Number(m.engine_power); }))),
         pwr: round2(mean(mine.map(powerPerTon))),
@@ -816,7 +880,7 @@
       var avg = round2(mean(vals));
       var best = null;
       rows.forEach(function (r) { var v = r.scores[a.key]; if (v != null && (!best || v > best.value)) best = { brand: r.brand, value: v }; });
-      return { key: a.key, axis: a.axis, name: a.name, avg: avg, n: vals.length, best: best };
+      return { key: a.key, no: a.no, axis: a.axis, name: a.name, ko: a.ko, weight: a.weight, group: a.group, avg: avg, n: vals.length, best: best };
     });
     var table = rows.map(function (r) {
       var diff = {};
@@ -840,7 +904,7 @@
         var v = r.scores[a.key];
         if (v == null || a.avg == null) return;
         var d = round2(v - a.avg);
-        var item = { type: 'score', key: a.key, name: a.name, value: v, diff: d, text: a.name + ' ' + v + '점 (평균 ' + a.avg + ', ' + (d > 0 ? '+' : '') + d + ')' };
+        var item = { type: 'score', key: a.key, name: a.name, value: v, diff: d, text: 'C' + a.no + ' ' + a.name + ' ' + v + '점 (평균 ' + a.avg + ', ' + (d > 0 ? '+' : '') + d + ')' };
         if (d >= th) s.push(item); else if (d <= -th) w.push(item);
       });
       if (r.pwr != null && pwrAll) {
@@ -875,18 +939,21 @@
   /* White Space — 전체 평균이 낮은 축부터. 최고 브랜드도 4점 미만이면 「비어 있는 자리」로 표시 */
   function whiteSpace(cmp) {
     return cmp.axes.filter(function (a) { return a.avg != null; }).slice().sort(function (a, b) { return a.avg - b.avg; })
-      .map(function (a) { return { key: a.key, name: a.name, avg: a.avg, best: a.best, open: !a.best || a.best.value < 4 }; });
+      .map(function (a) { return { key: a.key, name: 'C' + a.no + ' ' + a.name, avg: a.avg, best: a.best, open: !a.best || a.best.value < 4 }; });
   }
 
-  /* 디자인 평가 — 모델별 4축 점수와 모델 평균(07 화면의 평가 표와 같은 내용). 리포트 2번 항목과 Insight 의 바탕 */
+  /* 디자인 평가 — 모델별 8기준 최종 점수와 가중 점수(07 화면의 평가 표와 같은 내용). 리포트 2번 항목과 Insight 의 바탕 */
   function modelEvaluations(models) {
     return brandOrder(models.map(function (m) { return m.brand; }).filter(function (b, i, a) { return a.indexOf(b) === i; }))
       .reduce(function (out, b) {
         return out.concat(models.filter(function (m) { return m.brand === b; }).map(function (m) {
-          var sc = {}; SCORE_AXES.forEach(function (a) { sc[a.key] = scoreOf(m, a.key); });
-          var vals = SCORE_AXES.map(function (a) { return sc[a.key]; }).filter(function (x) { return x != null; });
+          var sc = modelScores(m), w = weightedScore(sc);
+          var rated = SCORE_AXES.filter(function (a) { return sc[a.key] != null; });
+          var src = {}; SCORE_AXES.forEach(function (a) { src[a.key] = scoreSource(m, a.key); });
           return { id: m.id, brand: m.brand, short: brandShort(m.brand), model_name: m.model_name, tonnage_class: m.tonnage_class,
-            scores: sc, avg: round2(mean(vals)), rated: vals.length, complete: vals.length === SCORE_AXES.length,
+            scores: sc, source: src, avg: w.value, coverage: w.coverage, rated: rated.length, complete: rated.length === SCORE_AXES.length,
+            aiOnly: SCORE_AXES.filter(function (a) { return src[a.key] === 'ai'; }).length,
+            notes: SCORE_AXES.reduce(function (o, a) { if (str(m[a.noteKey])) o[a.key] = str(m[a.noteKey]); return o; }, {}),
             tags: (m.design_tags || []).slice(), review: m.human_review_status || '' };
         }));
       }, []);
@@ -900,16 +967,17 @@
     var ws = whiteSpace(cmp);
     var head = [];
     var rated = evals.filter(function (e) { return e.rated; });
-    if (models.length) head.push('디자인 평가: 모델 ' + models.length + '건 중 ' + rated.length + '건 평가(4축 모두 입력 ' + evals.filter(function (e) { return e.complete; }).length + '건), 척도 ' + SCORE_MIN + '~' + SCORE_MAX + '점.');
+    if (models.length) head.push('디자인 평가: 모델 ' + models.length + '건 중 ' + rated.length + '건 평가(8기준 모두 입력 ' + evals.filter(function (e) { return e.complete; }).length + '건), 척도 ' + SCORE_MIN + '~' + SCORE_MAX + '점 · 가중 점수(비중 합 100%).' +
+      (evals.some(function (e) { return e.aiOnly; }) ? ' 디자이너 검증 전 AI 점수가 ' + evals.reduce(function (n, e) { return n + e.aiOnly; }, 0) + '칸 섞여 있습니다.' : ''));
     var topM = rated.slice().sort(function (a, b) { return b.avg - a.avg; });
-    if (topM.length) head.push('모델 평균이 가장 높은 모델은 ' + topM[0].short + ' ' + topM[0].model_name + '(' + topM[0].avg + '점)' +
+    if (topM.length) head.push('가중 점수가 가장 높은 모델은 ' + topM[0].short + ' ' + topM[0].model_name + '(' + topM[0].avg + '점)' +
       (topM.length > 1 ? ', 가장 낮은 모델은 ' + topM[topM.length - 1].short + ' ' + topM[topM.length - 1].model_name + '(' + topM[topM.length - 1].avg + '점)' : '') + '입니다.');
     var ranked = summary.filter(function (r) { return r.overall != null; }).sort(function (a, b) { return b.overall - a.overall; });
-    if (ranked.length) head.push('평가 평균이 가장 높은 브랜드는 ' + ranked[0].short + '(' + ranked[0].overall + '점)' +
+    if (ranked.length) head.push('가중 점수 평균이 가장 높은 브랜드는 ' + ranked[0].short + '(' + ranked[0].overall + '점)' +
       (ranked.length > 1 ? ', 가장 낮은 브랜드는 ' + ranked[ranked.length - 1].short + '(' + ranked[ranked.length - 1].overall + '점)' : '') + '입니다.');
-    else if (models.length) head.push('평가 점수가 아직 없습니다. 아래 「디자인 평가」 표에서 0~5점을 넣어 주세요.');
+    else if (models.length) head.push('평가 점수가 아직 없습니다. 아래 「디자인 평가」 표에서 1~5점을 넣어 주세요.');
     if (tags.length) head.push('가장 많이 관찰된 Design Tag 는 「' + tags[0].tag + '」(' + tags[0].count + '건, ' + tags[0].share + '%)입니다.');
-    if (ws.length) head.push('전체 평균이 가장 낮은 축은 ' + ws[0].name + '(' + ws[0].avg + '점)입니다' + (ws[0].open ? ' — 최고 브랜드도 4점 미만이라 차별화 여지를 검토해 주세요.' : '.'));
+    if (ws.length) head.push('전체 평균이 가장 낮은 기준은 ' + ws[0].name + '(' + ws[0].avg + '점)입니다' + (ws[0].open ? ' — 최고 브랜드도 4점 미만이라 차별화 여지를 검토해 주세요.' : '.'));
     return {
       count: models.length, brandCount: summary.length,
       scoredCount: models.filter(function (m) { return SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
@@ -922,19 +990,83 @@
   function insightPrompt(ins, scope) {
     var L = [];
     L.push('당신은 건설장비(굴착기·휠로더) 외장·실내 디자인 벤치마킹 전문가입니다.');
-    L.push('아래는 경쟁사 모델을 디자이너가 0~5점으로 평가하고 Design Tag 를 붙인 요약입니다.');
+    L.push('아래는 경쟁사 모델을 8가지 평가 기준(가중치 합 100%)으로 1~5점 평가하고 Design Tag 를 붙인 요약입니다.');
+    L.push('척도: ' + SCORE_LEVELS.map(function (l) { return l.value + ' ' + l.label; }).join(' / ') + '.');
     L.push('이 숫자와 태그만 근거로, 한국어로 다음 네 가지를 정리해 줘. 숫자에 없는 내용은 추측하지 말고 「자료 부족」이라고 적어 줘.');
     L.push('1) 주요 디자인 트렌드 3가지  2) 브랜드별 포지셔닝 한 줄씩  3) White Space(차별화 기회)  4) 다음 조사에서 보완할 자료');
     L.push('');
     L.push('[범위] ' + (scope ? scope.scope_id + ' · ' + scope.equipment_type + ' · ' + scope.tonnage_class : '전체 자료') + ' · 모델 ' + ins.count + '건 · 브랜드 ' + ins.brandCount + '개');
-    L.push('[축별 평균] ' + ins.scores.axes.map(function (a) { return a.name + ' ' + (a.avg == null ? '-' : a.avg); }).join(' / '));
-    L.push('[브랜드별 평균 점수 · 출력대비중량(kW/t) · 주요 태그]');
+    L.push('[평가 기준·가중치·기준 평균] ' + ins.scores.axes.map(function (a) { return a.axis + '(' + a.weight + '%) ' + (a.avg == null ? '-' : a.avg); }).join(' / '));
+    L.push('[브랜드별 기준 점수 · 가중 점수 · 출력대비중량(kW/t) · 주요 태그]');
     ins.summary.forEach(function (r) {
-      L.push('- ' + r.short + ' (' + r.models + '건): ' + SCORE_AXES.map(function (a) { return a.axis + ' ' + (r.scores[a.key] == null ? '-' : r.scores[a.key]); }).join(', ') +
-        ' · ' + (r.pwr == null ? '-' : r.pwr) + ' kW/t · ' + (r.tags.map(function (t) { return t.tag; }).join(', ') || '태그 없음'));
+      L.push('- ' + r.short + ' (' + r.models + '건): ' + SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + (r.scores[a.key] == null ? '-' : r.scores[a.key]); }).join(', ') +
+        ' · 가중 ' + (r.overall == null ? '-' : r.overall) + ' · ' + (r.pwr == null ? '-' : r.pwr) + ' kW/t · ' + (r.tags.map(function (t) { return t.tag; }).join(', ') || '태그 없음'));
     });
     L.push('[Design Tag 빈도] ' + ins.tags.slice(0, 10).map(function (t) { return t.tag + ' ' + t.count; }).join(', '));
     return L.join('\n');
+  }
+
+  /* ── AI 1차 평가(AI Analysis) — 모델 1건의 관찰 기록으로 8기준 점수·근거를 받는 프롬프트와 답 읽기 ──
+     평가 기준 자료 8절: 관찰 가능한 정보와 출처가 없는 내용을 AI 가 임의로 추정하지 않도록 → 근거가 없으면 score 를 null 로 받습니다.
+     Engineering Specs 는 점수가 아니라 Context Data 로만 넣습니다. 이미지·출처 URL 은 넣지 않습니다. */
+  var EVAL_PROMPT_VERSION = 'BM-8C-eval-v1';
+  function evalPrompt(m) {
+    var L = [], obs = [];
+    ['design', 'cabin', 'cmf', 'service'].forEach(function (b) {
+      fieldsOf(b).forEach(function (f) { var v = displayValue(m, f); if (v) obs.push('- ' + f.label + ': ' + v); });
+    });
+    var ctx = fieldsOf('engineering').map(function (f) { var v = displayValue(m, f); return v ? f.label + ' ' + v : ''; }).filter(Boolean);
+    L.push('당신은 건설장비 디자인 벤치마킹 평가자입니다. 아래 「관찰 기록」만 근거로 8가지 기준을 1~5점으로 평가해 JSON 으로만 답해줘.');
+    L.push('');
+    L.push('규칙');
+    L.push('1. 척도: ' + SCORE_LEVELS.map(function (l) { return l.value + '=' + l.label + '(' + l.meaning + ')'; }).join('; '));
+    L.push('2. 관찰 기록에 근거가 없는 기준은 추정하지 말고 score 를 null 로, evidence 에 「관찰 기록 없음」이라고 적어줘.');
+    L.push('3. evidence 에는 점수의 근거가 된 관찰 기록 문구를 짧게 옮겨줘. confidence 는 0~1.');
+    L.push('4. 제원(Engineering)은 점수 대상이 아니라 맥락 정보야.');
+    L.push('');
+    L.push('[평가 기준]');
+    SCORE_AXES.forEach(function (a) { L.push(a.id + ' — C' + a.no + ' ' + a.name + ' (비중 ' + a.weight + '%): ' + a.checks.join(' ')); });
+    L.push('');
+    L.push('[모델] ' + brandShort(m.brand) + ' ' + str(m.model_name) + ' · ' + str(m.equipment_type) + (m.release_year !== '' && m.release_year != null ? ' · ' + m.release_year + '년' : ''));
+    L.push('[제원 — 맥락] ' + (ctx.join(', ') || '없음'));
+    L.push('[Design Tags] ' + ((m.design_tags || []).join(', ') || '없음'));
+    L.push('[관찰 기록]');
+    L.push(obs.length ? obs.join('\n') : '(관찰 기록 없음)');
+    L.push('');
+    L.push('답 형식(JSON 객체만):');
+    L.push('{' + SCORE_AXES.map(function (a) { return '"' + a.id + '":{"score":3,"confidence":0.5,"evidence":"..."}'; }).join(',') + '}');
+    return L.join('\n');
+  }
+  function parseEvalAnswer(text) {
+    var t = str(text), f = /```(?:json)?\s*([\s\S]*?)```/i.exec(t);
+    if (f) t = f[1];
+    var s = t.indexOf('{'), e = t.lastIndexOf('}');
+    if (s < 0 || e <= s) throw new Error('JSON 객체({ … })를 찾지 못했습니다. AI 의 답을 그대로 붙여 넣어 주세요.');
+    var o = JSON.parse(t.slice(s, e + 1));
+    var out = { scores: {}, notes: {}, confidence: {}, errors: [] };
+    SCORE_AXES.forEach(function (a) {
+      var x = o[a.id] != null ? o[a.id] : o[a.key] != null ? o[a.key] : o['C' + a.no];
+      if (x == null) { out.errors.push('C' + a.no + ': 답에 없음'); return; }
+      var raw = typeof x === 'object' ? x.score : x;
+      var sc = raw == null || raw === '' ? '' : cleanScore(raw);
+      if (raw != null && raw !== '' && sc === '') out.errors.push('C' + a.no + ': 1~5 밖의 점수(' + raw + ')는 뺐습니다');
+      if (sc !== '') out.scores[a.aiKey] = sc;
+      var ev = typeof x === 'object' ? str(x.evidence) : '';
+      var cf = typeof x === 'object' ? Number(x.confidence) : NaN;
+      if (isFinite(cf) && cf >= 0 && cf <= 1) out.confidence[a.id] = cf;
+      if (ev) out.notes[a.noteKey] = 'AI: ' + ev + (isFinite(cf) && cf >= 0 && cf <= 1 ? ' (confidence ' + cf + ')' : '');
+    });
+    return out;
+  }
+  /* AI 답을 모델에 반영 — AI 점수 칸만 바꾸고, 디자이너 점수는 건드리지 않습니다. 근거 칸은 비어 있을 때만 채웁니다 */
+  function applyEvalAnswer(m, parsed) {
+    var x = JSON.parse(JSON.stringify(m));
+    SCORE_AXES.forEach(function (a) {
+      if (Object.prototype.hasOwnProperty.call(parsed.scores, a.aiKey)) x[a.aiKey] = parsed.scores[a.aiKey];
+      if (parsed.notes[a.noteKey] && !str(x[a.noteKey])) x[a.noteKey] = parsed.notes[a.noteKey];
+    });
+    x.prompt_version = EVAL_PROMPT_VERSION;
+    return x;
   }
 
   /* ── 전문가(디자이너) 피드백 — 리포트 항목별 평가·코멘트 기록 ── */
@@ -942,9 +1074,9 @@
      → 2번에 디자인 평가(모델별 점수표)를 넣고, 3~6번 Insight 는 그 점수에서 계산한다는 것을 이름에 밝혔습니다 */
   var REPORT_SECTIONS = [
     { id: 'overview', name: '1. Overview · 범위' },
-    { id: 'evaluation', name: '2. 디자인 평가 — 모델별 점수(0~5)' },
+    { id: 'evaluation', name: '2. 디자인 평가 — 8기준 점수(1~5)·가중 점수' },
     { id: 'brands', name: '3. Insight · 브랜드별 요약(평가 기반)' },
-    { id: 'scores', name: '4. Insight · 평가 점수 비교' },
+    { id: 'scores', name: '4. Insight · 평가표(기준 × 브랜드)' },
     { id: 'sw', name: '5. Insight · 강·약점' },
     { id: 'trend', name: '6. Insight · Design Trend · White Space' },
     { id: 'note', name: '7. 요약 코멘트' },
@@ -1063,17 +1195,22 @@
     var c = cycleById(cycleId);
     return c.days ? addDays(last, c.days) : addMonths(last, c.months);
   }
-  /* 기본값: 주간 · 오래된 자료 15년(2026-09-29 오후 수강생 답변). 예전 기본값(월간·180일)을 그대로 두고 있던 저장본은
-     한 번만 새 기본값으로 옮깁니다(defaults: 2). 사용자가 직접 고친 값은 건드리지 않습니다 */
-  var STALE_DAYS_DEFAULT = 5479;           // 15년 = 365 × 15 + 윤일 4
+  /* 기본값: 주간(2026-09-29 오후 수강생 답변) · 오래된 자료 = 수집일 기준 최장 20년(2026-09-29 오후 늦게 답변, 이전 15년).
+     예전 기본값(월간·180일, 또는 15년 기본값)을 그대로 두고 있던 저장본은 한 번만 새 기본값으로 옮깁니다(defaults: 3).
+     사용자가 직접 고친 값은 건드리지 않습니다 */
+  var STALE_DAYS_DEFAULT = 7305;           // 20년 = 365 × 20 + 윤일 5
+  var STALE_DAYS_PREV = 5479;              // 15년 = 365 × 15 + 윤일 4 (v0.4 기본값)
   var STALE_DAYS_MAX = 10958;              // 30년
-  function defaultOps() { return { cycle: 'weekly', stale_days: STALE_DAYS_DEFAULT, last_update: '', steps: {}, history: [], defaults: 2 }; }
-  function staleLabel(days) { return days % 365 < 5 && days >= 365 ? Math.floor(days / 365) + '년(' + days + '일)' : days + '일'; }
+  function defaultOps() { return { cycle: 'weekly', stale_days: STALE_DAYS_DEFAULT, last_update: '', steps: {}, history: [], defaults: 3 }; }
+  function staleLabel(days) { return days % 365 < 8 && days >= 365 ? Math.floor(days / 365) + '년(' + days + '일)' : days + '일'; }
   function restoreOps(p) {
     var o = defaultOps();
     if (!p || typeof p !== 'object') return o;
-    var oldDefault = p.defaults !== 2 && (p.cycle == null || p.cycle === 'monthly') && (p.stale_days == null || Number(p.stale_days) === 180);
-    if (!oldDefault) {
+    var oldDefault = p.defaults !== 2 && p.defaults !== 3 && (p.cycle == null || p.cycle === 'monthly') && (p.stale_days == null || Number(p.stale_days) === 180);
+    var prev15 = p.defaults === 2 && Number(p.stale_days) === STALE_DAYS_PREV;   // 15년 기본값 그대로 → 20년으로
+    if (oldDefault) { /* 기본값 그대로 */ }
+    else if (prev15) { if (UPDATE_CYCLES.some(function (c) { return c.id === p.cycle; })) o.cycle = p.cycle; }
+    else {
       if (UPDATE_CYCLES.some(function (c) { return c.id === p.cycle; })) o.cycle = p.cycle;
       var sd = Number(p.stale_days);
       if (sd >= 7 && sd <= STALE_DAYS_MAX) o.stale_days = Math.round(sd);
@@ -1190,11 +1327,12 @@
       ['주요 인사이트']
     ].concat(rep.insight.headline.map(function (x) { return ['', x]; }))
       .concat(rep.note ? [[], ['요약 코멘트 (' + (rep.note.origin || '작성') + ', ' + rep.note.saved_at + ')', rep.note.text]] : []) });
-    out.push({ name: '디자인평가', aoa: [['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return a.name + '(' + SCORE_MIN + '~' + SCORE_MAX + ')'; })).concat(['모델 평균', '입력 축 수', 'Design Tag', '검증 상태'])]
+    out.push({ name: '디자인평가', aoa: [['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.name + ' (' + a.weight + '%)'; })).concat(['가중 점수', '평가 비중(%)', '평가 기준 수', 'AI 미검증 칸', 'Design Tag', '검증 상태', '근거 / 코멘트'])]
       .concat(rep.insight.evaluations.map(function (e) {
-        return [e.short, e.model_name].concat(SCORE_AXES.map(function (a) { return e.scores[a.key] == null ? '' : e.scores[a.key]; })).concat([fmtScore(e.avg), e.rated, e.tags.join(', '), e.review]);
-      })) });
-    out.push({ name: '브랜드요약', aoa: [['브랜드', '모델 수', '평가 입력', '평가 평균'].concat(SCORE_AXES.map(function (a) { return a.name; }))
+        return [e.short, e.model_name].concat(SCORE_AXES.map(function (a) { return e.scores[a.key] == null ? '' : e.scores[a.key] + (e.source[a.key] === 'ai' ? ' (AI)' : ''); }))
+          .concat([fmtScore(e.avg), e.coverage, e.rated, e.aiOnly, e.tags.join(', '), e.review, SCORE_AXES.filter(function (a) { return e.notes[a.key]; }).map(function (a) { return 'C' + a.no + ': ' + e.notes[a.key]; }).join(' / ')]);
+      })).concat([[], ['척도'].concat(SCORE_LEVELS.map(function (l) { return l.value + ' ' + l.label; })), ['평가 기준 버전', RUBRIC_VERSION]]) });
+    out.push({ name: '브랜드요약', aoa: [['브랜드', '모델 수', '평가 입력', '가중 점수'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.ko; }))
       .concat(['운전중량 범위(t)', '평균 출력(kW)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일', '필수 메타 누락', '검증 확정'])]
       .concat(rep.insight.summary.map(function (r) {
         return [r.short, r.models, r.scored, fmtScore(r.overall)].concat(SCORE_AXES.map(function (a) { return fmtScore(r.scores[a.key]); }))
@@ -1202,16 +1340,19 @@
             r.tags.map(function (t) { return t.tag + '(' + t.count + ')'; }).join(', '), r.latest || '-', r.incomplete, r.confirmed]);
       })) });
     var cmp = rep.insight.scores;
-    out.push({ name: '점수비교', aoa: [['브랜드'].concat(cmp.axes.map(function (a) { return a.name; })).concat(cmp.axes.map(function (a) { return a.name + ' 평균 대비'; }))]
-      .concat(cmp.rows.map(function (r) { return [r.short].concat(cmp.axes.map(function (a) { return fmtScore(r.scores[a.key]); })).concat(cmp.axes.map(function (a) { return fmtDiff(r.diff[a.key]); })); }))
-      .concat([['축 평균(모델 단위)'].concat(cmp.axes.map(function (a) { return fmtScore(a.avg); }))]) });
+    /* 평가 기준 자료 5절 「실제 평가표 구성 예시」 모양 — 행 = 평가 기준, 열 = 가중치 · 브랜드들 · 기준 평균 */
+    out.push({ name: '평가표', aoa: [['평가 기준', '가중치(%)'].concat(cmp.rows.map(function (r) { return r.short; })).concat(['기준 평균(모델 단위)', '최고 브랜드'])]
+      .concat(cmp.axes.map(function (a) { return ['C' + a.no + ' ' + a.name, a.weight].concat(cmp.rows.map(function (r) { return fmtScore(r.scores[a.key]); })).concat([fmtScore(a.avg), a.best ? brandShort(a.best.brand) : '-']); }))
+      .concat([['가중 점수', 100].concat(cmp.rows.map(function (r) { return fmtScore(r.overall); })).concat(['', ''])])
+      .concat([[], ['평균 대비 차이', ''].concat(cmp.rows.map(function (r) { return r.short; }))])
+      .concat(cmp.axes.map(function (a) { return ['C' + a.no + ' ' + a.name, a.weight].concat(cmp.rows.map(function (r) { return fmtDiff(r.diff[a.key]); })); })) });
     out.push({ name: '강약점', aoa: [['브랜드', '구분', '내용']].concat([].concat.apply([], rep.insight.sw.map(function (r) {
       var rows = r.strengths.map(function (x) { return [r.short, '강점', x.text]; }).concat(r.weaknesses.map(function (x) { return [r.short, '약점', x.text]; }))
         .concat(r.notes.map(function (x) { return [r.short, '참고', x]; }));
       return rows.length ? rows : [[r.short, '-', '평균과 큰 차이 없음']];
     }))) });
     out.push({ name: '태그트렌드', aoa: [['Design Tag', '건수', '비율(%)', '최근 2개 연식 건수', '브랜드']].concat(rep.insight.tags.map(function (t) { return [t.tag, t.count, t.share, t.recent, t.brands.join(', ')]; }))
-      .concat([[], ['White Space (평균 낮은 축부터)', '축 평균', '최고 브랜드', '최고 점수', '비어 있는 자리']])
+      .concat([[], ['White Space (평균 낮은 기준부터)', '기준 평균', '최고 브랜드', '최고 점수', '비어 있는 자리']])
       .concat(rep.insight.whitespace.map(function (w) { return [w.name, w.avg, w.best ? brandShort(w.best.brand) : '-', w.best ? w.best.value : '-', w.open ? '예' : '']; })) });
     if (rep.compare) out.push({ name: '선택비교', aoa: [['블록', '구분', '항목'].concat(rep.compare.models).concat(['차이'])]
       .concat(rep.compare.rows.map(function (r) { return [r.block, r.kind, r.label].concat(r.values).concat([r.differs ? '차이 있음' : '']); })) });
@@ -1266,22 +1407,24 @@
         .map(function (t) { return '<div class="rp-tile"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>'; }).join('') + '</div>' +
       (ins.headline.length ? '<ul>' + ins.headline.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''));
     var ev = ins.evaluations;
-    sec('evaluation', ev.length ? tbl(['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return a.name; })).concat(['모델 평균', 'Design Tag', '검증 상태']),
+    sec('evaluation', ev.length ? tbl(['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.ko + ' ' + a.weight + '%'; })).concat(['가중 점수', 'Design Tag', '검증 상태']),
       ev.map(function (e) {
-        return [e.short, e.model_name].concat(SCORE_AXES.map(function (a) { return e.scores[a.key] == null ? '' : e.scores[a.key]; }))
-          .concat([fmtScore(e.avg), e.tags.join(', '), e.review]);
-      }), [2, 3, 4, 5, 6]) + '<p class="muted">척도 ' + SCORE_MIN + '~' + SCORE_MAX + '점(0 도 점수입니다). 「-」는 평가하지 않은 축입니다. 아래 3~6번 Insight 는 이 표의 점수로 계산합니다.</p>' : '<p class="muted">대상 모델이 없습니다.</p>');
-    sec('brands', ins.summary.length ? tbl(['브랜드', '모델', '평가 평균', '운전중량(t)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일'],
+        return [e.short, e.model_name].concat(SCORE_AXES.map(function (a) { return e.scores[a.key] == null ? '' : e.scores[a.key] + (e.source[a.key] === 'ai' ? ' AI' : ''); }))
+          .concat([fmtScore(e.avg) + (e.avg != null && e.coverage < 100 ? ' (' + e.coverage + '%)' : ''), e.tags.join(', '), e.review]);
+      }), [2, 3, 4, 5, 6, 7, 8, 9, 10]) +
+      '<p class="muted">척도 ' + esc(SCORE_LEVELS.map(function (l) { return l.value + ' ' + l.label; }).join(' · ')) + '. 가중 점수 = Σ(비중 × 점수) ÷ 평가한 기준의 비중 합 — 괄호는 평가한 비중 합(%). 「AI」는 디자이너 검증 전 AI 점수입니다. 「-」는 평가하지 않은 기준입니다. 아래 3~6번 Insight 는 이 표의 점수로 계산합니다. 평가 기준: ' + esc(RUBRIC_VERSION) + '</p>' : '<p class="muted">대상 모델이 없습니다.</p>');
+    sec('brands', ins.summary.length ? tbl(['브랜드', '모델', '가중 점수', '운전중량(t)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일'],
       ins.summary.map(function (r) { return [r.short, r.models, fmtScore(r.overall), r.weight ? r.weight.min + ' ~ ' + r.weight.max : '', fmtScore(r.pwr), r.years ? r.years.min + ' ~ ' + r.years.max : '', r.tags.map(function (t) { return t.tag; }).join(', '), r.latest]; }), [1, 2, 4]) : '<p class="muted">대상 모델이 없습니다.</p>');
     var cmp = ins.scores;
-    sec('scores', cmp.rows.length ? tbl(['브랜드'].concat(cmp.axes.map(function (a) { return a.name; })).concat(['평균']),
-      cmp.rows.map(function (r) {
-        return [r.short].concat(cmp.axes.map(function (a) {
+    var nb = cmp.rows.length, numIdx = []; for (var ni = 1; ni <= nb + 2; ni++) numIdx.push(ni);
+    sec('scores', cmp.rows.length ? tbl(['평가 기준', '가중치'].concat(cmp.rows.map(function (r) { return r.short; })).concat(['기준 평균']),
+      cmp.axes.map(function (a) {
+        return ['C' + a.no + ' ' + a.name, a.weight + '%'].concat(cmp.rows.map(function (r) {
           var d = r.diff[a.key];
           return { v: r.scores[a.key] == null ? '' : r.scores[a.key] + ' (' + fmtDiff(d) + ')', cls: d == null ? '' : d >= 0.5 ? 'up' : d <= -0.5 ? 'down' : '' };
-        })).concat([fmtScore(r.overall)]);
-      }).concat([['축 평균'].concat(cmp.axes.map(function (a) { return fmtScore(a.avg); })).concat([''])]), [1, 2, 3, 4, 5]) +
-      '<p class="muted">괄호는 축 평균(모델 단위) 대비 차이입니다. 0.5점 이상 높으면 초록, 낮으면 빨강입니다.</p>' : '<p class="muted">대상 모델이 없습니다.</p>');
+        })).concat([fmtScore(a.avg)]);
+      }).concat([['가중 점수', '100%'].concat(cmp.rows.map(function (r) { return fmtScore(r.overall); })).concat([''])]), numIdx) +
+      '<p class="muted">평가 기준 자료 5절의 평가표 모양입니다(행 = 기준, 열 = 브랜드). 괄호는 기준 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록, 낮으면 빨강입니다. 근거 이미지·URL·코멘트는 2번 표와 모델 상세에 있습니다.</p>' : '<p class="muted">대상 모델이 없습니다.</p>');
     sec('sw', '<div class="rp-sw">' + ins.sw.map(function (r) {
       return '<div class="rp-card"><h3>' + esc(r.short) + '</h3>' +
         (r.strengths.length ? '<div class="ok">강점</div><ul>' + r.strengths.map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('') + '</ul>' : '') +
@@ -1290,7 +1433,7 @@
         (r.notes.length ? '<ul class="muted">' + r.notes.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
     }).join('') + '</div>');
     sec('trend', (ins.tags.length ? tbl(['Design Tag', '건수', '비율', '최근 2개 연식', '브랜드'], ins.tags.slice(0, 12).map(function (t) { return [t.tag, t.count, t.share + '%', t.recent, t.brands.join(', ')]; }), [1, 2, 3]) : '<p class="muted">Design Tag 가 없습니다.</p>') +
-      (ins.whitespace.length ? '<p><b>White Space</b> — 전체 평균이 낮은 축부터</p><ul>' + ins.whitespace.map(function (w) {
+      (ins.whitespace.length ? '<p><b>White Space</b> — 전체 평균이 낮은 기준부터</p><ul>' + ins.whitespace.map(function (w) {
         return '<li>' + esc(w.name + ' 평균 ' + w.avg + '점 · 최고 ' + (w.best ? brandShort(w.best.brand) + ' ' + w.best.value + '점' : '-') + (w.open ? ' — 최고 브랜드도 4점 미만(비어 있는 자리)' : '')) + '</li>';
       }).join('') + '</ul>' : ''));
     sec('note', rep.note ? '<div class="rp-note">' + esc(rep.note.text) + '</div><p class="muted">' + esc((rep.note.origin || '작성') + ' · ' + rep.note.saved_at) + '</p>' : '<p class="muted">요약 코멘트가 없습니다. 07 Insight 에서 작성하거나 AI 요약을 붙여 넣어 주세요.</p>');
@@ -1329,10 +1472,12 @@
     exportHeaders: exportHeaders, modelsToSheet: modelsToSheet, toCsv: toCsv, parseCsv: parseCsv,
     emptyDb: emptyDb, restoreDb: restoreDb, activeScope: activeScope,
     /* 2026-09-29 추가 */
-    SCORE_AXES: SCORE_AXES, SCORE_MIN: SCORE_MIN, SCORE_MAX: SCORE_MAX, SCORE_OPTIONS: SCORE_OPTIONS, STALE_DAYS_DEFAULT: STALE_DAYS_DEFAULT, STALE_DAYS_MAX: STALE_DAYS_MAX,
+    SCORE_AXES: SCORE_AXES, SCORE_MIN: SCORE_MIN, SCORE_MAX: SCORE_MAX, SCORE_OPTIONS: SCORE_OPTIONS, SCORE_LEVELS: SCORE_LEVELS, RUBRIC_VERSION: RUBRIC_VERSION, LEGACY_SCORE_KEYS: LEGACY_SCORE_KEYS,
+    STALE_DAYS_DEFAULT: STALE_DAYS_DEFAULT, STALE_DAYS_PREV: STALE_DAYS_PREV, STALE_DAYS_MAX: STALE_DAYS_MAX, EVAL_PROMPT_VERSION: EVAL_PROMPT_VERSION,
     modelEvaluations: modelEvaluations, staleLabel: staleLabel, REPORT_SECTIONS: REPORT_SECTIONS, FEEDBACK_TYPES: FEEDBACK_TYPES, FEEDBACK_STATUS: FEEDBACK_STATUS,
     UPDATE_CYCLES: UPDATE_CYCLES, OPS_STEPS: OPS_STEPS, REPORT_CSS: REPORT_CSS,
-    cleanScore: cleanScore, scoreOf: scoreOf, powerPerTon: powerPerTon,
+    cleanScore: cleanScore, scoreOf: scoreOf, scoreSource: scoreSource, weightedScore: weightedScore, modelScores: modelScores, levelLabel: levelLabel, powerPerTon: powerPerTon,
+    evalPrompt: evalPrompt, parseEvalAnswer: parseEvalAnswer, applyEvalAnswer: applyEvalAnswer,
     brandSummary: brandSummary, scoreComparison: scoreComparison, strengthsWeaknesses: strengthsWeaknesses, tagTrends: tagTrends,
     whiteSpace: whiteSpace, buildInsight: buildInsight, insightPrompt: insightPrompt,
     sectionName: sectionName, feedbackTargetLabel: feedbackTargetLabel, validateFeedback: validateFeedback, addFeedback: addFeedback,

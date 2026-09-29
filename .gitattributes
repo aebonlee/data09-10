@@ -1,2 +1,4 @@
 # 예시 메일은 CRLF 바이트 그대로 보관한다 — js/report-sample.js 와 바이트가 같아야 테스트가 통과한다
 samples/report/*.eml -text
+test/fixtures/*.eml -text
+*.ps1 text eol=crlf
