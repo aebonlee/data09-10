@@ -24,6 +24,13 @@ DB 에 연결하는 코드는 다음 단계에서 붙입니다.
 | `model_media` | 모델 이미지(View 별), 모델마다 여러 장 | `data09-10.db` 의 `models[].media[]` |
 | `design_feedback` | 전문가(디자이너) 피드백 — 리포트 항목·모델별 평가(1~5)·코멘트·작성자·시각·상태 (2026-09-29) | `data09-10.db` 의 `feedback[]` |
 | `ops_history` | 정기 업데이트 사이클 완료 이력 (2026-09-29) | `data09-10.db` 의 `ops.history[]` |
+| `report_period` | **과제 B** 보고서 1건 — 주간/월간 · 기간 · 제목 · 요약 · 초안/승인 | `data09-10.report` 의 `settings` · `summaryOverride` · `approved` |
+| `report_mail` | **과제 B** 근거 메일 **메타만** — 보낸이·날짜·제목·정규화 제목·첨부 파일명·Message-ID. **본문 칸 없음** | `data09-10.report` 의 `mails[]` (본문 `text`·`main` 은 옮기지 않음) |
+| `report_item` | **과제 B** 실적·계획·이슈 항목 + 근거 메일 ID 목록 | `data09-10.report` 의 `items[]` |
+| `report_carryover` | **과제 B** 이전 보고서 계획 대비(제안·확정) | `data09-10.report` 의 `prevPlansText` · `carryFinal` |
+| `report_history` | **과제 B** 승인한 보고서 기록(계획 스냅숏, 기록성) | `data09-10.report` 의 `history[]` |
+
+**과제 B 는 메일 본문을 DB 에 저장하지 않는 설계입니다.** 사내 메일에는 기밀·개인정보가 섞여 있고(제출 기획서 7.1 「필요 최소한으로 처리」), 보고서에 필요한 것은 항목 문장과 「어느 메일이 근거인가」뿐입니다. 원문이 필요하면 Message-ID·제목·날짜로 Outlook 에서 다시 찾습니다. 규칙·AI 항목은 근거 메일이 있거나 상태가 「확인 필요」여야 저장됩니다(제출 기획서 설계 원칙 「확인 못 한 것은 확정하지 않는다」를 DB 제약으로도 막음). 보고서를 지우면 항목·이전 계획 판정도 지워지지만 승인 이력(`report_history`)은 남습니다. 도구의 「이력 삭제」 버튼과 달리 DB 에서는 이력을 지울 수 없습니다.
 
 2026-09-29 에 `workspace` 에 운영 루프 설정(`update_cycle`·`stale_days`·`last_update`·`ops_steps`)과 인사이트 요약 코멘트(`insight_note`…)가, `benchmark_model` 에 평가 점수 4칸(`score_exterior`·`score_cabin`·`score_cmf`·`score_service`, 1~5)이 붙었습니다. 이미 표를 만든 프로젝트도 `schema.sql` 을 다시 실행하면 칸이 더해지고 경쟁사 제약이 14개사로 바뀝니다.
 
@@ -31,7 +38,7 @@ DB 에 연결하는 코드는 다음 단계에서 붙입니다.
 모델·Scope 의 `id` 는 표의 기본키 `id` 와 겹치므로 `model_id`('M0001')·`scope_id`('EXC-MED-006-TT')로 둡니다.
 이미지 한 장이 붙는 모델은 `model_ref`(모델 행의 기본키)로 가리킵니다.
 
-기록성 데이터는 `design_feedback`·`ops_history` 두 표입니다. 쌓기만 하고 고치거나 지울 수 없습니다. 피드백은 반영 여부(`status`·`resolved_at`) 칸만 바꿀 수 있습니다(칸 단위 GRANT).
+기록성 데이터는 `design_feedback`·`ops_history`·`report_history` 세 표입니다. 쌓기만 하고 고치거나 지울 수 없습니다. 피드백은 반영 여부(`status`·`resolved_at`) 칸만 바꿀 수 있습니다(칸 단위 GRANT).
 
 ### 권한
 
@@ -61,9 +68,9 @@ DB 에 연결하는 코드는 다음 단계에서 붙입니다.
 
 ## 확인 방법
 
-1. 왼쪽 메뉴 **Table Editor** 에 위 6개 표가 보이는지 확인합니다.
+1. 왼쪽 메뉴 **Table Editor** 에 위 11개 표(과제 A 6 + 과제 B 5)가 보이는지 확인합니다.
 2. 각 표 이름 옆에 RLS 가 켜져 있는지(「RLS disabled」 경고가 없는지) 확인합니다.
-3. **Authentication → Policies** 에서 처음 4개 표에는 SELECT·INSERT·UPDATE·DELETE 정책 4개, `design_feedback` 에는 SELECT·INSERT·UPDATE 3개, `ops_history` 에는 SELECT·INSERT 2개가 붙어 있는지 봅니다.
+3. **Authentication → Policies** 에서 처음 4개 표에는 SELECT·INSERT·UPDATE·DELETE 정책 4개, `design_feedback` 에는 SELECT·INSERT·UPDATE 3개, `ops_history` 에는 SELECT·INSERT 2개, 과제 B 의 `report_period`·`report_mail`·`report_item`·`report_carryover` 에는 4개씩, `report_history` 에는 SELECT·INSERT 2개(모두 39개)가 붙어 있는지 봅니다.
 4. SQL Editor 에서 아래를 실행해 함수 권한에 `anon` 이 없는지 봅니다.
 
 ```sql
@@ -92,6 +99,7 @@ PostgreSQL 16 이상이 필요합니다(macOS: `brew install postgresql@17`).
 - 스키마를 두 번 적용해도 오류가 없는가
 - 사용자 A 의 행이 사용자 B 에게 보이지 않고, 고치거나 지울 수도 없는가
 - 남의 모델에 이미지를 끼워 넣을 수 없는가
+- (과제 B) 남의 보고서에 항목·이전 계획 판정을 끼워 넣을 수 없는가, 근거 없는 규칙·AI 항목이 「완료」로 저장되지 않는가, 메일 본문 칸이 없는가, 보고 이력을 고치거나 지울 수 없는가
 - 로그인하지 않은 사용자는 아무것도 읽거나 쓸 수 없는가
 - CHECK·UNIQUE 제약이 잘못된 값과 중복을 막는가
 - 함수 실행 권한에 PUBLIC·anon 이 남지 않았는가

@@ -148,7 +148,8 @@ set local role anon;
 do $t$
 declare t text;
 begin
-  foreach t in array array['workspace','benchmark_scope','benchmark_model','model_media','design_feedback','ops_history']
+  foreach t in array array['workspace','benchmark_scope','benchmark_model','model_media','design_feedback','ops_history',
+                           'report_period','report_mail','report_item','report_carryover','report_history']
   loop
     perform public._assert_raises(format('select * from public.%I', t), '42501', 'anon 은 ' || t || ' 를 읽을 수 없다');
   end loop;
@@ -175,7 +176,7 @@ begin
 
   perform public._assert_eq((select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
      join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'),
-    21::bigint, '정책 수가 21개다 (4개 표 × 4 + 피드백 3 + 운영 이력 2, 재실행해도 늘지 않는다)');
+    39::bigint, '정책 수가 39개다 (과제 A: 4개 표 × 4 + 피드백 3 + 운영 이력 2 = 21, 과제 B: 4개 표 × 4 + 보고 이력 2 = 18, 재실행해도 늘지 않는다)');
 end $t$;
 
 -- ----------------------------------------------------------------------------
@@ -317,6 +318,100 @@ end $t$;
 commit;
 
 -- ----------------------------------------------------------------------------
+-- 5-c. 과제 B — 업무보고 Agent (2026-09-29)
+-- ----------------------------------------------------------------------------
+begin;
+set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local role authenticated;
+do $t$
+declare v_period bigint; n bigint;
+begin
+  insert into public.report_period (report_type, period_start, period_end, title)
+    values ('weekly', '2026-09-21', '2026-09-27', '디자인팀(가상)') returning id into v_period;
+  insert into public.report_mail (mail_id, message_id, from_name, sent_day, subject, subject_norm, attachments)
+    values ('E002', 'cab-001@example.com', '디자인팀장(가상)', '2026-09-21', '[캡] 시안 검토', '[캡] 시안 검토', '{CMF_샘플목록.xlsx}');
+  insert into public.report_item (period_ref, item_id, origin, category, status, body, evidence)
+    values (v_period, 'R001', 'rule', '실적', '완료', 'B안을 최종 시안으로 선정', '{E002}');
+  insert into public.report_item (period_ref, item_id, origin, category, status, body)
+    values (v_period, 'A001', 'ai', '이슈', '확인 필요', '근거 없는 AI 항목은 확인 필요로만 둔다');
+  insert into public.report_item (period_ref, item_id, origin, category, status, body)
+    values (v_period, 'M001', 'manual', '계획', '예정', '직접 입력은 근거 없이도 된다');
+  insert into public.report_carryover (period_ref, plan_project, plan_text, suggestion, final, matched_item, similarity)
+    values (v_period, '캡', '최종 시안 선정', '완료', '완료', 'R001', 0.93);
+  insert into public.report_history (report_type, period_start, period_end, counts, plans)
+    values ('weekly', '2026-09-21', '2026-09-27', '{"plan":1}', '[{"project":"캡","text":"모델링 업데이트"}]');
+  perform public._assert_eq((select count(*) from public.report_item), 3::bigint, 'A 는 보고서 항목 3건(규칙·AI·직접)을 저장한다');
+
+  perform public._assert((select count(*) = 0 from information_schema.columns
+      where table_schema = 'public' and table_name = 'report_mail' and column_name in ('body', 'text', 'main', 'html')),
+    'report_mail 에는 메일 본문 칸이 없다 (메타만 저장하는 설계)');
+  perform public._assert_raises($s$insert into public.report_item (period_ref, item_id, origin, category, status, body)
+     select id, 'R002', 'rule', '실적', '완료', '근거 없는 완료' from public.report_period$s$,
+    '23514', '규칙·AI 항목이 근거 메일 없이 「완료」로 확정될 수 없다 (확인 필요만 허용)');
+  perform public._assert_raises($s$insert into public.report_item (period_ref, item_id, origin, category, body, evidence)
+     select id, 'R003', 'rule', '잡담', 'x', '{E002}' from public.report_period$s$,
+    '23514', '분류는 실적·계획·이슈만 받는다');
+  perform public._assert_raises($s$insert into public.report_item (period_ref, item_id, origin, category, status, body, evidence)
+     select id, 'R004', 'rule', '실적', '끝남', 'x', '{E002}' from public.report_period$s$,
+    '23514', '상태는 기획서 3.2 의 6종만 받는다');
+  perform public._assert_raises($s$insert into public.report_item (period_ref, item_id, origin, category, body, evidence)
+     select id, 'R001', 'rule', '실적', 'dup', '{E002}' from public.report_period$s$,
+    '23505', '한 보고서 안에서 item_id 중복은 UNIQUE 가 막는다');
+  perform public._assert_raises($s$insert into public.report_mail (mail_id, message_id) values ('E003', 'cab-001@example.com')$s$,
+    '23505', '같은 Message-ID 메일은 두 번 넣을 수 없다');
+  insert into public.report_mail (mail_id) values ('E004');
+  insert into public.report_mail (mail_id) values ('E005');
+  perform public._assert(true, 'Message-ID 가 없는 메일(붙여넣기)은 여러 통 넣을 수 있다');
+  perform public._assert_raises($s$insert into public.report_period (report_type, period_start, period_end) values ('weekly', '2026-09-28', '2026-09-20')$s$,
+    '23514', '보고 기간 끝이 시작보다 앞설 수 없다');
+  perform public._assert_raises($s$update public.report_period set status = '승인'$s$,
+    '23514', '승인 상태에는 승인 시각이 있어야 한다');
+  update public.report_period set status = '승인', approved_at = now();
+  get diagnostics n = row_count;
+  perform public._assert_eq(n, 1::bigint, '승인 시각과 함께면 승인할 수 있다');
+  perform public._assert_raises($s$insert into public.report_carryover (period_ref, plan_text, suggestion) select id, 'x', '취소' from public.report_period$s$,
+    '23514', '이전 계획 판정은 완료·진행·지연·이월만 받는다');
+  perform public._assert_raises($s$update public.report_history set plans = '[]'$s$, '42501', '보고 이력은 고칠 수 없다');
+  perform public._assert_raises($s$delete from public.report_history$s$, '42501', '보고 이력은 지울 수 없다');
+end $t$;
+commit;
+
+select set_config('test.a_period', id::text, false) as a_period from public.report_period \gset
+
+begin;
+set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+set local role authenticated;
+do $t$
+declare n bigint;
+begin
+  perform public._assert_eq((select count(*) from public.report_period) + (select count(*) from public.report_mail)
+    + (select count(*) from public.report_item) + (select count(*) from public.report_carryover) + (select count(*) from public.report_history),
+    0::bigint, 'B 에게는 A 의 보고서·메일 메타·항목·판정·이력이 보이지 않는다');
+  perform public._assert_raises(format($s$insert into public.report_item (period_ref, item_id, origin, category, status, body, evidence)
+     values (%s, 'R009', 'rule', '실적', '완료', '끼워넣기', '{E002}')$s$, current_setting('test.a_period')),
+    '42501', 'B 는 A 의 보고서에 항목을 끼워 넣을 수 없다');
+  perform public._assert_raises(format($s$insert into public.report_carryover (period_ref, plan_text, suggestion) values (%s, 'x', '이월')$s$, current_setting('test.a_period')),
+    '42501', 'B 는 A 의 보고서에 이전 계획 판정을 끼워 넣을 수 없다');
+  delete from public.report_item;
+  get diagnostics n = row_count;
+  perform public._assert_eq(n, 0::bigint, 'B 의 DELETE 는 A 의 항목에 닿지 않는다');
+end $t$;
+commit;
+
+-- A 의 보고서를 지우면 항목·판정도 함께 지워진다(이력은 남는다)
+begin;
+set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local role authenticated;
+do $t$
+begin
+  delete from public.report_period;
+  perform public._assert_eq((select count(*) from public.report_item) + (select count(*) from public.report_carryover), 0::bigint,
+    '보고서를 지우면 항목·이전 계획 판정도 함께 지워진다 (on delete cascade)');
+  perform public._assert_eq((select count(*) from public.report_history), 1::bigint, '승인 이력은 보고서를 지워도 남는다');
+end $t$;
+commit;
+
+-- ----------------------------------------------------------------------------
 -- 6. 함수 권한 · search_path · 표 권한
 -- ----------------------------------------------------------------------------
 do $t$
@@ -350,6 +445,9 @@ begin
 end $t$;
 
 -- 정리
+delete from public.report_history;
+delete from public.report_mail;
+delete from public.report_period;
 delete from public.design_feedback;
 delete from public.ops_history;
 delete from public.model_media;

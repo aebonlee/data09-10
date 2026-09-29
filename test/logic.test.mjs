@@ -434,3 +434,6 @@ test('reportHtml: 항목 9개(data-section), 글자는 이스케이프', () => {
 });
 
 console.log('\n' + passed + '개 통과' + (process.exitCode ? ' · 실패 있음' : ''));
+
+// 과제 B(업무보고 Agent) 테스트도 함께 돌린다 — 따로: node test/report-logic.test.mjs
+await import('./report-logic.test.mjs');
