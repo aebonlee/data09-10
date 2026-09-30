@@ -118,6 +118,7 @@
 
   /* ── 머리·메뉴 ───────────────────────── */
   var NAV = [
+    ['#/home', '00', 'Home', '시작 화면 · 전체 흐름'],
     ['#/scope', '01', 'Scope Setup', 'Benchmark 범위 설정'],
     ['#/dashboard', '02', 'Status Dashboard', '보유 자료 현황'],
     ['#/gallery', '03', 'Card Gallery', '이미지·스펙 탐색'],
@@ -130,7 +131,7 @@
     ['#/ops', '10', '운영 루프', '정기 업데이트·신선도']
   ];
   function renderChrome(route) {
-    route = route || location.hash || '#/scope';
+    route = route || location.hash || '#/home';
     var nav = document.getElementById('nav'); nav.innerHTML = '';
     var openFb = (db.feedback || []).filter(function (x) { return x.status !== '반영됨'; }).length;
     var ost = db.models.length ? opsNow() : null;
@@ -288,6 +289,86 @@
               db.activeScope ? h('button', { type: 'button', class: 'btn', onclick: function () { db.activeScope = ''; scopeDraft = null; save(); toast('Scope 를 해제했습니다. 전체 자료를 봅니다.'); render(); } }, 'Scope 해제(전체 보기)') : null)))),
       h('section', { class: 'card' }, h('h2', null, '저장한 Scope'), saved),
       localUseCard()
+    ];
+  }
+
+  /* ── 시작 화면 (2026-09-30 수강생 「메인디자인 요청」) ──
+     과제 A 의 10단계를 다섯 묶음으로 보여 주고, 지금 자료 상태를 한눈에, 과제 B(data09-27)로 가는 길을 둡니다. */
+  var TASK_B_URL = 'https://aebonlee.github.io/data09-27/';
+  var HOME_GROUPS = [
+    { name: '범위와 현황', desc: '무엇을 비교할지 정하고, 가진 자료를 봅니다.', stages: ['#/scope', '#/dashboard'] },
+    { name: '탐색과 비교', desc: '이미지·제원을 훑고 모델을 나란히 놓습니다.', stages: ['#/gallery', '#/compare'] },
+    { name: '자료 모으기', desc: '표준 Schema 로 한 건씩 넣거나 엑셀로 한 번에 옮깁니다.', stages: ['#/edit', '#/data'] },
+    { name: '분석과 보고', desc: '8기준 점수로 강약점을 뽑고 리포트로 묶습니다.', stages: ['#/insight', '#/report'] },
+    { name: '검증과 운영', desc: '디자이너가 확인하고, 정해 둔 주기로 다시 돌립니다.', stages: ['#/feedback', '#/ops'] }
+  ];
+  function viewHome() {
+    var sc = scopeNow();
+    var nModels = db.models.length;
+    var nImages = db.models.reduce(function (s, m) { return s + (m.media || []).length; }, 0);
+    var rated = db.models.filter(function (m) { return L.SCORE_AXES.some(function (a) { return m[a.key] !== '' && m[a.key] != null; }); }).length;
+    var openFb = (db.feedback || []).filter(function (x) { return x.status !== '반영됨'; }).length;
+    var ost = nModels ? opsNow() : null;
+    var opsText = !ost ? '자료를 넣은 뒤 시작' : ost.state === 'overdue' ? '예정일 ' + (-ost.daysLeft) + '일 지남' : ost.state === 'due' ? '오늘 업데이트 예정' : ost.state === 'none' ? '아직 완료 기록 없음' : '다음 ' + ost.next;
+    var live = {
+      '#/scope': sc ? '적용 중 ' + sc.scope_id : '아직 정하지 않음',
+      '#/dashboard': nModels ? '모델 ' + nModels + '건 · 이미지 ' + nImages + '장' : '자료 0건',
+      '#/gallery': nImages ? '이미지 ' + nImages + '장' : '이미지 없음',
+      '#/compare': '비교함 ' + db.compare.length + ' / ' + L.MAX_COMPARE,
+      '#/edit': '필수 메타 ' + L.REQUIRED.length + '개 확인',
+      '#/data': db._sample ? '예시 데이터 사용 중' : 'xlsx · CSV · JSON',
+      '#/insight': rated ? '점수 있는 모델 ' + rated + '건' : '평가 점수 없음',
+      '#/report': '인쇄 · PDF · xlsx · HTML',
+      '#/feedback': openFb ? '열린 피드백 ' + openFb + '건' : '열린 피드백 없음',
+      '#/ops': opsText
+    };
+    function stageCard(href) {
+      var n = NAV.filter(function (x) { return x[0] === href; })[0];
+      return h('a', { class: 'hs-card', href: href },
+        h('span', { class: 'hs-no', 'aria-hidden': 'true' }, n[1]),
+        h('span', { class: 'hs-body' },
+          h('span', { class: 'hs-t' }, h('span', { class: 'sr' }, 'STAGE ' + n[1] + ' '), n[2]),
+          h('span', { class: 'hs-s' }, n[3]),
+          h('span', { class: 'hs-live' }, live[href])));
+    }
+    var start = sc ? { href: '#/dashboard', label: 'Status Dashboard 로 이어서' } : { href: '#/scope', label: 'Scope 정하고 시작하기' };
+    var second = nModels ? { href: '#/report', label: 'Benchmarking Report 보기' } : { href: '#/data', label: '예시 데이터로 둘러보기' };
+    var facts = [['Scope', sc ? sc.scope_id : '미지정'], ['모델', nModels + '건'], ['이미지', nImages + '장'], ['평가한 모델', rated + '건'], ['열린 피드백', openFb + '건'], ['운영 루프', opsText]];
+
+    return [
+      h('section', { class: 'home-hero', 'aria-labelledby': 'homeTitle' },
+        h('div', { class: 'hh-main' },
+          h('p', { class: 'hh-eyebrow' }, '과제 A · 1단계 시연판'),
+          h('h1', { id: 'homeTitle' }, 'Design Benchmarking Agent'),
+          h('p', { class: 'hh-lead' }, '경쟁사 장비의 이미지·문서·제원을 표준 Schema 로 모읍니다.\nExterior · Cabin · CMF · Spec 기준으로 비교하고, 8기준 평가와 리포트, 정기 업데이트까지 한 흐름으로 이어 갑니다.'),
+          h('div', { class: 'hh-cta' },
+            h('a', { class: 'hh-btn hh-btn-primary', href: start.href }, start.label),
+            h('a', { class: 'hh-btn', href: second.href }, second.label))),
+        h('dl', { class: 'hh-facts', 'aria-label': '지금 자료 상태' }, facts.map(function (f) {
+          return h('div', { class: 'hh-fact' + (f[0] === 'Scope' ? ' wide' : '') }, h('dt', null, f[0]), h('dd', null, f[1]));
+        }))),
+      h('section', { class: 'home-flow', 'aria-labelledby': 'flowTitle' },
+        h('div', { class: 'hf-head' }, h('h2', { id: 'flowTitle' }, '작업 흐름 — 10단계'),
+          h('p', { class: 'note' }, '왼쪽 메뉴와 같은 순서입니다. 칸을 누르면 그 단계로 갑니다. 아래 작은 글씨는 지금 이 브라우저의 자료 상태입니다.')),
+        h('ol', { class: 'hf-groups' }, HOME_GROUPS.map(function (g, i) {
+          return h('li', { class: 'hf-group' },
+            h('div', { class: 'hf-gh' }, h('span', { class: 'hf-gno', 'aria-hidden': 'true' }, String(i + 1)), h('span', null, h('span', { class: 'hf-gt' }, g.name), h('span', { class: 'hf-gd' }, g.desc))),
+            h('div', { class: 'hf-cards' }, g.stages.map(stageCard)));
+        }))),
+      h('div', { class: 'home-more' },
+        h('section', { class: 'card home-b', 'aria-labelledby': 'taskBTitle' },
+          h('p', { class: 'hb-tag' }, '과제 B'),
+          h('h2', { id: 'taskBTitle' }, '업무보고 Agent'),
+          h('p', null, '주간·월간만 고르면 내 PC 의 Outlook 메일과 첨부를 모아 근거가 붙은 업무보고 초안을 만듭니다. 자동화판은 별도 저장소(data09-27)에서 이어 갑니다.'),
+          h('div', { class: 'btn-row' },
+            h('a', { class: 'btn btn-primary', href: TASK_B_URL }, '자동화판 열기 (data09-27)'),
+            h('a', { class: 'btn', href: 'report/index.html' }, '이 저장소의 1단계 시연판'))),
+        h('section', { class: 'card home-local', 'aria-labelledby': 'localTitle' },
+          h('h2', { id: 'localTitle' }, '데이터와 사용 안내'),
+          h('ul', { class: 'home-list' },
+            h('li', null, '자료는 이 브라우저(localStorage)에만 저장됩니다. 「06 가져오기·내보내기」에서 JSON 백업을 받아 두세요.'),
+            h('li', null, '처음이면 「예시 데이터 불러오기」로 가상 모델 15건을 넣어 전체 흐름을 먼저 볼 수 있습니다.'),
+            h('li', null, '내 PC 에서 파일로 여는 방법과 고쳐 쓰는 방법은 ', h('a', { href: 'guide.html' }, '사용 안내'), '에 있습니다.'))))
     ];
   }
 
@@ -1364,15 +1445,22 @@
 
   /* ── 09 전문가(디자이너) 피드백 ──────── */
   var fbState = { status: '', target: '' };
+  var FB_LEVELS = ['매우 부족', '부족', '보통', '좋음', '매우 좋음'];
   function viewFeedback(preset) {
     var list = db.feedback || [];
     var targetSel = h('select', { name: 'target' },
       h('optgroup', { label: '리포트 항목' }, L.REPORT_SECTIONS.map(function (s) { return h('option', { value: s.id, selected: s.id === preset }, s.name); })),
       h('optgroup', { label: '모델' }, L.filterModels(db.models, {}).map(function (m) { return h('option', { value: 'model:' + m.id, selected: 'model:' + m.id === preset }, L.brandShort(m.brand) + ' ' + m.model_name); })));
     var typeSel = selectEl('type', L.FEEDBACK_TYPES, L.FEEDBACK_TYPES[1]);
-    var rating = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '평가' }, [1, 2, 3, 4, 5].map(function (n) {
-      return h('label', { class: 'opt' }, h('input', { type: 'radio', name: 'rating', value: String(n), checked: n === 3 }), h('span', { class: 't' }, n + '점'));
-    }));
+    /* 평가 1~5 — 번호와 뜻을 한 칸에 담은 버튼 줄(2026-09-30 겹침 수정). 진짜 라디오를 칸 안에 숨겨 두어
+       Tab 으로 들어와 ←→ 로 고르고, 칸 전체를 눌러도 됩니다. 묶음 이름은 fieldset 의 legend 가 읽어 줍니다. */
+    var rating = h('fieldset', { class: 'rate-field span-all' },
+      h('legend', null, '평가 ', h('span', { class: 'rate-range' }, '(1 매우 부족 ~ 5 매우 좋음)'), h('span', { class: 'req', 'aria-hidden': 'true' }, '*')),
+      h('div', { class: 'rate-seg' }, FB_LEVELS.map(function (lab, i) {
+        var n = i + 1;
+        return h('label', { class: 'rate-opt' }, h('input', { type: 'radio', name: 'rating', value: String(n), checked: n === 3, required: true }),
+          h('span', { class: 'rate-n' }, String(n)), h('span', { class: 'rate-l' }, lab));
+      })));
     var comment = h('textarea', { name: 'comment', rows: 4, placeholder: '예) 실제 디자인 관점에서는 「Chiseled」보다 「Technical / Functional」에 가깝습니다.' });
     var author = h('input', { name: 'author', value: db.lastAuthor || '', placeholder: '예) 디자인팀 홍길동', autocomplete: 'name' });
     var form = h('form', { novalidate: true, onsubmit: function (e) {
@@ -1390,7 +1478,7 @@
     } },
       h('div', { class: 'form-grid' },
         field('대상', targetSel, { req: true }), field('분류', typeSel, { req: true }),
-        field('평가 (1 매우 부족 ~ 5 매우 좋음)', rating, { req: true, span: true }),
+        rating,
         field('코멘트', comment, { span: true, hint: '「동의(수정 없음)」이 아니면 무엇을 어떻게 고칠지 적어 주세요.' }),
         field('작성자', author, { req: true, hint: '이 브라우저에 기억해 둡니다.' })),
       h('div', { class: 'btn-row', style: 'margin-top:12px' }, h('button', { type: 'submit', class: 'btn btn-primary' }, '피드백 기록')));
@@ -1496,10 +1584,11 @@
 
   /* ── 라우터 ─────────────────────────── */
   function render() {
-    var route = location.hash || (db.scopes.length ? '#/dashboard' : '#/scope');
+    var route = location.hash || '#/home';   // 2026-09-30 — 첫 화면은 시작 화면
     var parts = route.replace(/^#\//, '').split('/');
     var view;
     switch (parts[0]) {
+      case 'home': view = viewHome(); break;
       case 'dashboard': view = viewDashboard(); break;
       case 'gallery': view = viewGallery(); break;
       case 'compare': view = viewCompare(); break;

@@ -369,3 +369,103 @@ pre.mail-body { white-space: pre-wrap; word-break: keep-all; overflow-wrap: brea
 .radar-key { display: inline-block; width: 20px; border-top: 3px solid; margin-right: 8px; vertical-align: middle; }
 .local-use ol { margin: 0 0 12px; padding-left: 22px; }
 .local-use li { margin: 4px 0; }
+
+/* ── 2026-09-30 저녁 — 선택 칸 겹침 수정 · 시작 화면 ─────────────────
+   파일 맨 끝에 둡니다(같은 특정도면 나중 규칙이 이깁니다). */
+
+/* 겹침의 원인: `.field input`(글 입력칸용 — 폭 100% · 높이 44 · 안쪽 여백)이 라벨 안의 라디오·체크박스에도
+   걸려, 라디오가 칸 폭을 다 차지하고 옆 글자(「1점」…)를 칸 밖 → 다음 칸 밑으로 밀어냈습니다.
+   `.opt input`(18px)은 특정도가 같은데 앞줄에 있어 졌습니다. 라디오·체크박스는 어디서든 제 크기로 되돌립니다. */
+.field input[type="radio"], .field input[type="checkbox"] {
+  width: 18px; height: 18px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; flex: none;
+}
+
+/* 09 전문가 피드백 — 평가 1~5 버튼 줄 */
+.rate-field { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rate-field legend { font-weight: 700; font-size: .9rem; padding: 0; margin-bottom: 6px; }
+.rate-field legend .rate-range { font-weight: 500; color: var(--muted); }
+.rate-field legend .req { color: var(--danger); margin-left: 4px; }
+.rate-seg { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; max-width: 640px; }
+.rate-opt {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 64px; padding: 8px 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  cursor: pointer; text-align: center; min-width: 0;
+}
+/* 라디오는 칸 안에 보이지 않게 두되 지우지 않습니다 — Tab·←→·Space 와 화면 읽기 프로그램이 그대로 씁니다 */
+.rate-opt input[type="radio"] { position: absolute; top: 0; left: 0; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.rate-n { font-size: 1.2rem; font-weight: 800; line-height: 1.1; color: var(--text); }
+.rate-l { font-size: .8rem; line-height: 1.25; color: var(--muted); }
+.rate-opt:hover { border-color: var(--primary); }
+.rate-opt:has(input:checked) { background: var(--primary-dark); border-color: var(--primary-dark); }
+.rate-opt:has(input:checked) .rate-n, .rate-opt:has(input:checked) .rate-l { color: var(--on-primary); }
+.rate-opt:has(input:focus-visible) { outline: 3px solid #7fb0ff; outline-offset: 2px; }
+@media (max-width: 420px) { .rate-seg { gap: 4px; } .rate-opt { padding: 8px 2px; } .rate-l { font-size: .74rem; } }
+
+/* 사이드바 과제 B 링크의 보조 줄 */
+.side-switch-sub { display: block; font-weight: 500; font-size: .78rem; color: var(--on-side-muted); }
+
+/* 시작 화면 — 사이드바와 같은 남색 계열 */
+.home-hero {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: stretch;
+  background: linear-gradient(135deg, var(--side) 0%, var(--side-2) 100%); color: var(--on-side);
+  border-radius: 18px; padding: 32px; margin-bottom: 24px;
+}
+.hh-eyebrow { display: inline-block; margin: 0 0 10px; padding: 3px 12px; border-radius: 999px; background: rgba(255, 255, 255, .1);
+  color: #cfe0f7; font-size: .82rem; font-weight: 700; letter-spacing: .02em; }
+.home-hero h1 { color: #ffffff; font-size: clamp(1.7rem, 3.4vw, 2.4rem); letter-spacing: -.01em; margin: 0 0 12px; }
+.hh-lead { color: #d5e1f1; font-size: 1.02rem; white-space: pre-line; max-width: 44em; margin: 0 0 20px; }
+.hh-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.hh-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 10px 20px; border-radius: var(--radius);
+  border: 1px solid rgba(255, 255, 255, .45); color: #ffffff; font-weight: 700; text-decoration: none;
+}
+.hh-btn:hover { background: rgba(255, 255, 255, .08); }
+.hh-btn-primary { background: #ffffff; color: var(--side); border-color: #ffffff; }
+.hh-btn-primary:hover { background: #e7eef8; }
+.hh-btn:focus-visible { outline: 3px solid #7fb0ff; outline-offset: 2px; }
+.hh-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; align-content: center; }
+.hh-fact { background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .14); border-radius: 12px; padding: 10px 14px; min-width: 0; }
+.hh-fact dt { font-size: .8rem; color: #c3d3e8; }
+.hh-fact dd { margin: 2px 0 0; font-weight: 800; color: #ffffff; overflow-wrap: anywhere; }
+
+.home-flow { margin-bottom: 24px; }
+.hf-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 12px; }
+.hf-head h2 { margin: 0; font-size: 1.2rem; }
+.hf-head .note { margin: 0; }
+/* 묶음 하나 = 한 줄: 왼쪽 묶음 이름, 오른쪽 단계 카드 두 개 (좁으면 위아래로) */
+.hf-groups { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hf-group { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+  display: grid; grid-template-columns: minmax(0, 15em) minmax(0, 1fr); gap: 10px 16px; align-items: center; min-width: 0; }
+.hf-gh { display: flex; gap: 10px; align-items: flex-start; }
+.hf-gno { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--side); color: #ffffff; font-weight: 800; font-size: .9rem;
+  display: inline-flex; align-items: center; justify-content: center; }
+.hf-gt { display: block; font-weight: 800; }
+.hf-gd { display: block; font-size: .85rem; color: var(--muted); }
+.hf-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hs-card {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: #f8fafd; color: var(--text); text-decoration: none; min-width: 0;
+}
+.hs-card:hover { border-color: var(--primary); background: var(--primary-soft); }
+.hs-card:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.hs-no { flex: none; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 800; font-size: .85rem; color: var(--primary-dark); padding-top: 2px; }
+.hs-body { display: flex; flex-direction: column; min-width: 0; }
+.hs-t { font-weight: 800; }
+.hs-s { font-size: .85rem; color: var(--muted); }
+.hs-live { font-size: .8rem; color: #17427e; font-weight: 700; margin-top: 2px; }
+
+.home-more { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.home-more .card { margin-bottom: 0; }
+.hb-tag { display: inline-block; margin: 0 0 6px; padding: 2px 10px; border-radius: 999px; background: var(--side); color: #ffffff; font-size: .78rem; font-weight: 800; }
+.home-list { margin: 0; padding-left: 20px; }
+.home-list li { margin: 4px 0; }
+.hh-fact.wide { grid-column: 1 / -1; }
+.hh-fact.wide dd { font-family: ui-monospace, Menlo, Consolas, monospace; overflow-wrap: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) { .hf-group { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .hf-cards { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) {
+  .home-hero { grid-template-columns: minmax(0, 1fr); padding: 24px 20px; }
+  .home-more { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) { .hh-facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; } .hh-btn { width: 100%; } }
+@media print { .home-hero, .home-flow, .home-more { display: none; } }
