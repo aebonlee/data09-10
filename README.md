@@ -84,6 +84,8 @@
 
 **온라인: https://aebonlee.github.io/data09-10/report/** · 내 PC: `report/index.html` 을 더블클릭(인터넷 없이 동작). 과제 A 화면 왼쪽 메뉴 아래 「과제 B · 업무보고 Agent 로」 링크로도 갑니다.
 
+> **업무보고 Agent 는 [data09-27](https://github.com/aebonlee/data09-27) 에서 자동화판으로 계속합니다** (2026-09-30 — 주간·월간만 고르면 내 PC 의 Outlook(Online 사서함 + .pst)에서 메일·첨부를 자동으로 모아 보고서로, https://aebonlee.github.io/data09-27/). 이 리포의 과제 B 는 그대로 동작합니다.
+
 - 메일은 **이 브라우저 안에서만** 읽고 저장합니다(localStorage `data09-10.report`, 과제 A 와 따로). 어디에도 보내지 않습니다.
 - 「02 메일·자료 입력」 또는 「07 이력·백업」의 **「예시 불러오기」** 를 누르면 가상 메일 9통(인물·업무 모두 가상, example.com)과 지난주에 승인한 가상 보고서 1건이 들어가고 규칙 분류까지 됩니다. 같은 메일이 `samples/report/*.eml` 에 파일로도 있어 「메일 파일 불러오기」로 직접 넣어 볼 수 있습니다.
 - 기획서: [docs/02_과제B_업무보고Agent_기획서.md](docs/02_과제B_업무보고Agent_기획서.md) · 제출 원문 `docs/source/03_AI_업무보고_Agent_기획서.docx`
