@@ -11,7 +11,7 @@
 |---|---|
 | 제출자 | 이동철 |
 | 과정 | 현장 데이터 수집·디지털화 전문가과정 1차수 (2026) |
-| 진행 단계 | 과제 A: 1단계 개발 완료 (2026-09-28), 추가 요청 반영 (2026-09-29 — Mecalac·Insight·Report·전문가 피드백·운영 루프), 오후 답변 반영(디자인 평가 포함 리포트·주간), 오후 늦게 평가 기준 자료 반영(8기준·비중·1~5·가중 점수·AI/디자이너 분리, 오래된 자료 20년), 2026-09-30 보고서 목적별 비중 프로필(버전 관리)·Radar Chart — https://aebonlee.github.io/data09-10/ <br> 과제 B: 1단계 개발 완료 (2026-09-29), 오후 늦게 클래식 Outlook 폴더 내보내기 스크립트·주간 양식 표 — https://aebonlee.github.io/data09-10/report/ <br> 공용: 사내 LLM(OpenAI 호환) AI 연결 설정 |
+| 진행 단계 | 과제 A: 1단계 개발 완료 (2026-09-28), 추가 요청 반영 (2026-09-29 — Mecalac·Insight·Report·전문가 피드백·운영 루프), 오후 답변 반영(디자인 평가 포함 리포트·주간), 오후 늦게 평가 기준 자료 반영(8기준·비중·1~5·가중 점수·AI/디자이너 분리, 오래된 자료 20년), 2026-09-30 보고서 목적별 비중 프로필(버전 관리)·Radar Chart, 이미지 View 에 Rear-Quarter 추가 — https://aebonlee.github.io/data09-10/ <br> 과제 B: 1단계 개발 완료 (2026-09-29), 오후 늦게 클래식 Outlook 폴더 내보내기 스크립트·주간 양식 표 — https://aebonlee.github.io/data09-10/report/ <br> 공용: 사내 LLM(OpenAI 호환) AI 연결 설정 |
 | 다음 개발 | 과제 A 2단계 — 코랩 Spec Extractor(PDF → 제원)·VLM 태그 PoC, 카탈로그 질의(Insight) PoC, 팀 공용 저장소 결정, Moodboard·Trend Matrix <br> 과제 B 2단계 — PC 로컬 Agent(COM, 정기 실행) 또는 Graph API(승인 시), 첨부 내용 추출(Python), PowerPoint 보고서, 실제 메일 표본 PoC |
 
 ## 이 저장소 이용 안내
@@ -57,7 +57,7 @@
 | 기능 (기획서 5장) | 상태 | 1단계에서 한 것 / 남은 것 |
 |---|---|---|
 | Scope Setup | 완료 | Excavator 6단계·Wheel Loader 5단계 조건부 톤급, 14개사 Multi-select(2026-09-29 Mecalac 추가)(전체 선택·해제, 이 범위 보유 건수 표시), Purpose 7종, Scope ID 생성·저장·재적용·해제. ID 형식은 가정(기획서 10장 6번) |
-| 자료 등록 | 완료 | 6절 Schema 10개 블록 전 필드, 제원(FACT)과 관찰(OBSERVATION) 구분, 이미지 파일 또는 경로 + View 지정(18절 5종 + 기타), 단위 변환(t→kg, hp→kW), 운전중량으로 톤급 자동, 중복 모델 차단, schema_version 기록 |
+| 자료 등록 | 완료 | 6절 Schema 10개 블록 전 필드, 제원(FACT)과 관찰(OBSERVATION) 구분, 이미지 파일 또는 경로 + View 지정(18절 5종 + Rear-Quarter(09-30 추가) + 기타), 단위 변환(t→kg, hp→kW), 운전중량으로 톤급 자동, 중복 모델 차단, schema_version 기록 |
 | 엑셀 일괄 가져오기 | 완료 | xlsx·csv, 시트·머리글 행 선택, 열 → Schema 자동 연결 후 수정, 머리글 단위 인식, 미리보기, 같은 브랜드+모델명은 갱신 |
 | 필수 메타 점검 | 완료 | brand·model·category·collected_at·source URL·image 누락 표시(대시보드·갤러리·상세), 톤급과 운전중량 불일치 경고 |
 | Status Dashboard | 완료 | 브랜드 × Tonnage 모델 수·이미지 수, View 보유 현황, 최근 수집일, Scope 브랜드만 보기 |
@@ -66,7 +66,7 @@
 | Detail / Evidence | 완료 | 원본 이미지(View 전환), 제원, 관찰 블록(입력 출처 표시), Source URL·수집일·신뢰도, 입력자·검증 상태 |
 | Report 내보내기 | 완료 | 비교표 Excel(비교표·출처·근거 시트), 인쇄용 PDF(브라우저 인쇄), CSV. 전체 KB 는 Excel·CSV·JSON 백업 |
 | Insight 페이지 | 완료 (09-29) | 브랜드별 요약, 평가표(8기준 × 브랜드, 기준 평균 대비·가중 점수), 강·약점 자동 추출, Design Tag 트렌드, White Space, 요약 코멘트(AI 요약 반자동 · 자동 보내기) |
-| 보고서 목적별 비중 · Radar Chart | 완료 (09-30) | 비중 프로필 6개(종합 = 자료 권장, 나머지 5개 예시)·비중 편집·버전 이력(덮어쓰지 않음)·사용자 프로필·Scope 목적으로 권하기, 리포트·xlsx 에 「프로필 vN」 표기. Radar(외부 라이브러리 없는 SVG) — 07 Insight(브랜드 최대 6개) · 리포트 4번 |
+| 보고서 목적별 비중 · Radar Chart | 완료 (09-30) | 비중 프로필 6개(종합 = 자료 권장, 나머지 5개는 자료에 없어 임시로 정한 예시 값 — 팀이 따로 정한 값이 없으면 그대로 사용)·비중 편집·버전 이력(덮어쓰지 않음)·사용자 프로필·Scope 목적으로 권하기, 리포트·xlsx 에 「프로필 vN」 표기. Radar(외부 라이브러리 없는 SVG) — 07 Insight(브랜드 최대 6개) · 리포트 4번 |
 | 디자인 평가 8기준 | 완료 (09-29 오후 늦게) | 평가 기준 자료의 8기준·권장 비중·1~5 Scale, 기준마다 디자이너·AI 점수와 근거, 가중 점수, 평가 기준 안내, AI 1차 평가(관찰 기록만 보냄) |
 | AI 연결 설정 (공용) | 완료 (09-29 오후 늦게) | OpenAI 호환 주소·모델·키(선택) — 사내 온프레미스 LLM 에 바로 보내기. 반자동은 그대로 기본 |
 | Benchmarking Report | 완료 (09-29) | 10개 항목 보고서 화면(디자인 평가 모델별 점수 포함, 09-29 오후), 인쇄·PDF, xlsx(9개 시트), HTML 한 파일. PPTX 는 3단계 |

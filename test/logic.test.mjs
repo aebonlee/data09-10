@@ -144,14 +144,15 @@ test('예시 데이터: 모델 15건, 모두 「예시-」 모델명, 출처는 
   assert.equal(db._sample, true);
   assert.equal(db.activeScope, 'EXC-MED-006-XT');
 });
-test('statusMatrix: Excavator 11건, CAT Medium 1건 이미지 5장', () => {
+test('statusMatrix: Excavator 11건, CAT Medium 1건 이미지 6장', () => {
   const mx = L.statusMatrix(db.models, 'Excavator');
   assert.equal(mx.totals.models, 11);
   const cat = mx.rows.find(r => r.brand === 'Caterpillar (CAT)');
-  assert.deepEqual(cat.cells.MED, { models: 1, images: 5 });
+  assert.deepEqual(cat.cells.MED, { models: 1, images: 6 });
   assert.equal(cat.views.Rear, 1);
-  // 이미지 수: 예시 목록 view 개수 + Side 1장씩 = 5+4+4+3+2+4+2+1+3+2 + Mecalac 3 = 33
-  assert.equal(mx.totals.images, 33);
+  assert.equal(cat.views['Rear-Quarter'], 1); // 2026-09-30 추가 View
+  // 이미지 수: 예시 목록 view 개수 + Side 1장씩 = 6+4+5+3+2+4+2+1+3+2 + Mecalac 3 = 35 (CAT·Volvo 에 Rear-Quarter 1장씩)
+  assert.equal(mx.totals.images, 35);
   assert.deepEqual(mx.rows.find(r => r.brand === 'Mecalac').cells.MED, { models: 1, images: 3 });
   assert.equal(mx.totals.incomplete, 2); // XCMG 수집일, Sany 출처
 });
@@ -166,6 +167,7 @@ test('statusMatrix: Scope 브랜드만 → 6행', () => {
 test('filterModels: Scope 적용 시 Medium 6개사 → 6건', () => {
   assert.equal(L.filterModels(db.models, { scope: db.scopes[0] }).length, 6);
   assert.equal(L.filterModels(db.models, { view: 'Rear' }).length, 2); // CAT·Volvo 예시만 Rear
+  assert.equal(L.filterModels(db.models, { view: 'Rear-Quarter' }).length, 2); // CAT·Volvo 예시만 Rear-Quarter
   assert.equal(L.filterModels(db.models, { year_from: 2025 }).length, 3); // Volvo EX230·Bobcat EX145·Volvo WL150 (Mecalac MW12 는 20년 넘은 자료 시연으로 2005년)
   assert.equal(L.filterModels(db.models, { q: '넓은 글라스' }).length, 5);
   assert.equal(L.filterModels(db.models, { incomplete: true }).length, 3);
@@ -231,6 +233,19 @@ test('rowsToModels: 이미지 여러 개·사선 전면 → Front-Quarter·톤�
   assert.equal(imported.models[3].tonnage_class, 'MED'); // 17.1 t
   assert.equal(imported.models[2].equipment_type, 'Wheel Loader');
   assert.equal(imported.models[2].tonnage_class, 'MED'); // 12.8 t
+});
+test('View 에 Rear-Quarter(후면 사선) — 목록 순서·엑셀 표기 연결·저장본 유지 (2026-09-30)', () => {
+  assert.deepEqual(L.VIEWS, ['Side', 'Front-Quarter', 'Rear-Quarter', 'Rear', 'Cabin', 'CMF Detail', '기타']);
+  const views = ['Rear quarter', 'rear-quarter', 'Rear 3/4', '후면 사선', '후방사선', '리어 쿼터', '3/4 rear'];
+  const got = L.rowsToModels([['브랜드', '모델명', '이미지', 'View']].concat(views.map((v, i) => ['CAT', 'RQ' + i, 'a' + i + '.jpg', v])),
+    { 0: 'brand', 1: 'model_name', 2: '_image_path', 3: '_image_view' }).models.map(m => m.media[0].view_type);
+  assert.deepEqual(got, views.map(() => 'Rear-Quarter'));
+  // 앞쪽 사선·후면은 그대로
+  const other = L.rowsToModels([['브랜드', '모델명', '이미지', 'View'], ['CAT', 'F', 'f.jpg', 'Front 3/4'], ['CAT', 'Q', 'q.jpg', 'quarter'], ['CAT', 'R', 'r.jpg', 'Rear'], ['CAT', 'B', 'b.jpg', '후면']],
+    { 0: 'brand', 1: 'model_name', 2: '_image_path', 3: '_image_view' }).models.map(m => m.media[0].view_type);
+  assert.deepEqual(other, ['Front-Quarter', 'Front-Quarter', 'Rear', 'Rear']);
+  const m = L.cleanModel({ brand: 'cat', model_name: 'X', media: [{ path: 'a.jpg', view_type: 'Rear-Quarter' }] });
+  assert.equal(m.media[0].view_type, 'Rear-Quarter');
 });
 test('mergeModels: 새 모델 추가, 같은 모델은 빈 칸 빼고 갱신', () => {
   const base = [{ ...L.cleanModel({ brand: 'CAT', model_name: '예시-EX330', equipment_type: 'Excavator', publisher: '기존' }), id: 'M0001' }];

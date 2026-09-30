@@ -50,6 +50,15 @@
       '<rect x="96" y="112" width="24" height="10" rx="3" fill="#f5d76e"/><rect x="200" y="112" width="24" height="10" rx="3" fill="#f5d76e"/>' +
       '<rect x="120" y="64" width="64" height="44" rx="6" fill="' + c.main + '"/><rect x="128" y="72" width="48" height="26" rx="3" fill="#1b2430" opacity=".85"/>';
   }
+  /* 후면 사선(Rear-Quarter) — 카운터웨이트 쪽에서 비스듬히 본 모양. 2026-09-30 View 추가 */
+  function excRearQuarter(c) {
+    return '<polygon points="70,184 250,172 256,196 76,210" fill="#2b3440"/>' +
+      '<polygon points="90,120 236,110 244,170 96,182" fill="' + c.main + '"/>' +
+      '<polygon points="90,150 170,146 172,182 96,182" fill="' + c.accent + '"/>' +
+      '<rect x="100" y="126" width="18" height="9" rx="3" fill="#f5d76e"/>' +
+      '<polygon points="170,62 226,58 230,112 172,116" fill="' + c.main + '"/><polygon points="178,70 220,67 222,100 180,103" fill="#1b2430" opacity=".85"/>' +
+      '<polygon points="236,110 290,70 298,80 244,124" fill="' + c.main + '"/>';
+  }
   function cabin(c, wide) {
     var g = wide ? 150 : 120;
     return '<rect x="60" y="30" width="200" height="170" rx="16" fill="' + c.main + '"/>' +
@@ -89,6 +98,7 @@
     if (type === 'Excavator') {
       list.push({ view_type: 'Side', svg: svg(320, 230, excSide(c, spec.wideCab), 'Side') });
       if (spec.views.indexOf('fq') >= 0) list.push({ view_type: 'Front-Quarter', svg: svg(320, 230, excFront(c), 'Front-Quarter') });
+      if (spec.views.indexOf('rq') >= 0) list.push({ view_type: 'Rear-Quarter', svg: svg(320, 230, excRearQuarter(c), 'Rear-Quarter') });
       if (spec.views.indexOf('rear') >= 0) list.push({ view_type: 'Rear', svg: svg(320, 230, excRear(c), 'Rear') });
     } else {
       list.push({ view_type: 'Side', svg: svg(320, 230, whlSide(c), 'Side') });
@@ -103,9 +113,9 @@
 
   /* 가상 모델 목록. w=운전중량(kg) p=출력(kW) b=버킷(m³) — 모두 시연용 가상 값 */
   var LIST = [
-    ['Excavator', 'cat', '예시-EX210', 2024, 21800, 118, 1.0, 0, ['fq', 'rear', 'cab', 'cmf'], true, ['저중심 카운터웨이트', '수평 캐릭터라인', '넓은 글라스'], 20],
+    ['Excavator', 'cat', '예시-EX210', 2024, 21800, 118, 1.0, 0, ['fq', 'rq', 'rear', 'cab', 'cmf'], true, ['저중심 카운터웨이트', '수평 캐릭터라인', '넓은 글라스'], 20],
     ['Excavator', 'komatsu', '예시-EX215', 2023, 22400, 123, 1.1, 1, ['fq', 'cab', 'cmf'], false, ['라운드 후드', '분할형 사이드커버'], 18],
-    ['Excavator', 'volvo', '예시-EX230', 2025, 23500, 129, 1.2, 3, ['fq', 'rear', 'cab'], true, ['슬림 필러', '넓은 글라스', '수평 캐릭터라인'], 12],
+    ['Excavator', 'volvo', '예시-EX230', 2025, 23500, 129, 1.2, 3, ['fq', 'rq', 'rear', 'cab'], true, ['슬림 필러', '넓은 글라스', '수평 캐릭터라인'], 12],
     ['Excavator', 'hitachi', '예시-EX220', 2022, 22000, 122, 1.0, 2, ['cab', 'cmf'], false, ['각진 볼륨', '분할형 사이드커버'], 25],
     ['Excavator', 'jcb', '예시-EX220X', 2024, 21900, 129, 1.1, 0, ['fq'], false, ['각진 볼륨', '저중심 카운터웨이트'], 9],
     ['Excavator', 'bobcat', '예시-EX145', 2025, 14800, 86, 0.6, 4, ['fq', 'cab', 'cmf'], true, ['라운드 후드', '넓은 글라스'], 6],

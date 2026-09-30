@@ -1106,7 +1106,8 @@
       }))));
     var card = h('section', { class: 'card', id: 'weights' }, h('h2', null, '보고서 목적별 비중'),
       h('p', { class: 'note' }, '보고서 목적에 맞는 비중 프로필을 골라 주세요. 가중 점수·강약점·Radar·Benchmarking Report 가 이 비중으로 다시 계산됩니다. ' +
-        '「종합 벤치마킹」은 평가 기준 자료의 권장 비중이고, 나머지 다섯 개는 목적에 맞춰 잡은 예시 값입니다. 팀 기준에 맞게 고쳐 새 버전으로 저장해 주세요(평가 기준 자료 8절 「가중치 버전 관리」 — 이전 버전은 지우지 않습니다).'),
+        '「종합 벤치마킹」 비중은 평가 기준 자료에 적힌 값입니다. 나머지 다섯 개(외장·Cabin/HMI·CMF·사용성/안전·브랜드 아이덴티티)는 자료에 없어서 목적에 맞게 임시로 정한 예시 값입니다. ' +
+        '팀에서 보고서 목적마다 8개 기준의 중요도를 따로 정해 둔 것이 없으면 예시 값을 그대로 쓰셔도 됩니다. 정해 둔 것이 있으면 아래 「비중 고치기」에서 그 숫자로 바꿔 저장해 주세요(바꾸기 전 값은 지워지지 않고 이력에 남습니다).'),
       h('div', { class: 'btn-row' }, field('비중 프로필', profileSelect()),
         h('div', null, h('div', null, h('strong', null, prof.name + ' v' + cur.v), h('span', { class: 'note' }, ' · ' + prof.source)), h('div', { class: 'note' }, prof.desc || ''),
           h('div', { class: 'note' }, weightSummary(cur.weights)))),

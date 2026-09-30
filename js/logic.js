@@ -67,8 +67,8 @@
     { code: 'F', name: 'Full Benchmark', desc: '전 항목' }
   ];
 
-  /* 18절 Image View Taxonomy 예시 5종 (+ 기타) */
-  var VIEWS = ['Side', 'Front-Quarter', 'Rear', 'Cabin', 'CMF Detail', '기타'];
+  /* 18절 Image View Taxonomy 예시 5종 + Rear-Quarter(2026-09-30 수강생 요청 「장비 이미지 View 에 'Rear quarter' 추가」) (+ 기타) */
+  var VIEWS = ['Side', 'Front-Quarter', 'Rear-Quarter', 'Rear', 'Cabin', 'CMF Detail', '기타'];
 
   var SOURCE_TYPES = ['OEM 공식', '공식 Press/Exhibition', '신뢰 미디어', '카탈로그 PDF', '사내 자료', '기타'];
   /* 12절 Source Reliability 순서 */
@@ -665,6 +665,8 @@
     if (!n) return '기타';
     var hit = VIEWS.filter(function (x) { return norm(x) === n; })[0];
     if (hit) return hit;
+    /* 후면 사선(Rear quarter · Rear 3/4 · 후면 사선)은 「quarter」「3/4」「사선」을 함께 쓰므로 Front-Quarter 보다 먼저 봅니다 */
+    if (/(rear|back|후면|후방|리어)\s*[-_]?\s*(quarter|3\/4|사선|쿼터)|(quarter|3\/4|사선|쿼터)\s*[-_]?\s*(rear|back|후면|후방|리어)/.test(String(v).toLowerCase())) return 'Rear-Quarter';
     if (/front|전면|3\/4|quarter|사선/.test(String(v).toLowerCase())) return 'Front-Quarter';
     if (/side|측면/.test(String(v).toLowerCase())) return 'Side';
     if (/rear|후면|back/.test(String(v).toLowerCase())) return 'Rear';
@@ -947,25 +949,25 @@
 
   /* ── 보고서 목적별 비중 프로필 (2026-09-30 수강생 요청 「보고서 목적별로 비중 변경 옵션」) ──
      평가 기준 자료 8절 「기준·가중치 버전 관리」를 따라, 비중을 바꾸면 덮어쓰지 않고 새 버전(v2, v3 …)으로 쌓습니다.
-     기본 프로필 6개 중 「종합 벤치마킹」만 자료의 권장 비중이고, 나머지 5개는 목적에 맞춰 우리가 잡은 예시(가정)입니다.
+     기본 프로필 6개 중 「종합 벤치마킹」만 자료의 권장 비중이고, 나머지 5개는 자료에 없어 목적에 맞춰 임시로 정한 예시 값입니다(팀이 따로 정한 값이 없으면 그대로 써도 됨 — 2026-09-30 수강생 확인 질문).
      팀 기준이 있으면 화면에서 고쳐 새 버전으로 저장하면 됩니다. 비중은 0~100 정수, 합 100. */
   var WEIGHT_PRESETS = [
     { id: 'full', name: '종합 벤치마킹', purposes: ['Full Benchmark', 'Trend'], source: '평가 기준 자료 2절 권장 비중',
       desc: '신모델 방향을 넓게 볼 때. 외장·실내·사용성·아이덴티티를 자료의 권장 비중으로 봅니다.',
       weights: { proportion: 15, form: 15, ext_cmf: 10, int_arch: 15, int_cmf: 10, ergonomics: 15, hmi: 10, identity: 10 } },
-    { id: 'exterior', name: '외장 디자인 보고', purposes: ['Exterior'], source: '예시(가정)',
+    { id: 'exterior', name: '외장 디자인 보고', purposes: ['Exterior'], source: '예시 값 — 평가 기준 자료에 없음',
       desc: '외관 조형 방향을 정할 때. C1~C3 과 아이덴티티(C8)를 높였습니다.',
       weights: { proportion: 20, form: 20, ext_cmf: 15, int_arch: 10, int_cmf: 5, ergonomics: 10, hmi: 5, identity: 15 } },
-    { id: 'cabin', name: 'Cabin·HMI 보고', purposes: ['Cabin'], source: '예시(가정)',
+    { id: 'cabin', name: 'Cabin·HMI 보고', purposes: ['Cabin'], source: '예시 값 — 평가 기준 자료에 없음',
       desc: '캡 실내·조작계 개선 과제를 볼 때. C4~C7 을 높였습니다.',
       weights: { proportion: 5, form: 5, ext_cmf: 5, int_arch: 20, int_cmf: 15, ergonomics: 20, hmi: 20, identity: 10 } },
-    { id: 'cmf', name: 'CMF 전략 보고', purposes: ['CMF'], source: '예시(가정)',
+    { id: 'cmf', name: 'CMF 전략 보고', purposes: ['CMF'], source: '예시 값 — 평가 기준 자료에 없음',
       desc: '색·소재·마감 방향을 정할 때. 외장 CMF(C3)·실내 CMF(C5)를 높였습니다.',
       weights: { proportion: 5, form: 10, ext_cmf: 25, int_arch: 10, int_cmf: 25, ergonomics: 5, hmi: 5, identity: 15 } },
-    { id: 'usability', name: '사용성·안전 보고', purposes: ['Serviceability', 'Safety'], source: '예시(가정)',
+    { id: 'usability', name: '사용성·안전 보고', purposes: ['Serviceability', 'Safety'], source: '예시 값 — 평가 기준 자료에 없음',
       desc: '승하차·시야·조작 동선을 볼 때. 인간공학(C6)·HMI(C7)를 높였습니다.',
       weights: { proportion: 10, form: 10, ext_cmf: 5, int_arch: 10, int_cmf: 5, ergonomics: 30, hmi: 20, identity: 10 } },
-    { id: 'identity', name: '브랜드 아이덴티티 보고', purposes: [], source: '예시(가정)',
+    { id: 'identity', name: '브랜드 아이덴티티 보고', purposes: [], source: '예시 값 — 평가 기준 자료에 없음',
       desc: '경영진·브랜드 보고처럼 차별성을 앞세울 때. C8 과 외장 표현을 높였습니다.',
       weights: { proportion: 15, form: 15, ext_cmf: 15, int_arch: 5, int_cmf: 5, ergonomics: 5, hmi: 5, identity: 35 } }
   ];

@@ -166,7 +166,7 @@ create table if not exists public.model_media (
   model_ref    bigint not null references public.benchmark_model(id) on delete cascade,
   media_id     text not null,                                   -- 'img1'
   view_type    text not null default '기타'
-               check (view_type in ('Side', 'Front-Quarter', 'Rear', 'Cabin', 'CMF Detail', '기타')),
+               check (view_type in ('Side', 'Front-Quarter', 'Rear-Quarter', 'Rear', 'Cabin', 'CMF Detail', '기타')),
   path         text not null default '',
   data         text not null default '',
   media_type   text not null default '',
@@ -327,6 +327,14 @@ create table if not exists public.weight_version (
   -- upsert 하지 않는다(쌓기만). 같은 프로필·버전 중복만 막는다
   constraint weight_version_uniq unique (owner_id, profile_id, version)
 );
+
+-- ----------------------------------------------------------------------------
+-- 1-g. 2026-09-30 — 이미지 View 에 Rear-Quarter(후면 사선) 추가 (수강생 요청 「장비 이미지 View 에 'Rear quarter'」)
+--   이미 표를 만든 프로젝트는 위 create table 이 건너뛰어지므로 CHECK 를 다시 건다(다시 실행해도 안전).
+-- ----------------------------------------------------------------------------
+alter table public.model_media drop constraint if exists model_media_view_type_check;
+alter table public.model_media add constraint model_media_view_type_check
+  check (view_type in ('Side', 'Front-Quarter', 'Rear-Quarter', 'Rear', 'Cabin', 'CMF Detail', '기타'));
 
 -- ----------------------------------------------------------------------------
 -- 1-c. 과제 B — 업무보고 Agent (2026-09-29 추가)

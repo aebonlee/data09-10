@@ -265,7 +265,14 @@ begin
     '23514', '경로도 파일도 없는 이미지는 막는다');
   perform public._assert_raises($s$insert into public.model_media (model_ref, media_id, view_type, path)
      select id, 'img8', 'Top', 'a.jpg' from public.benchmark_model where model_id = 'M0001'$s$,
-    '23514', 'View 는 18절 5종 + 기타 만 받는다');
+    '23514', 'View 는 18절 5종 + Rear-Quarter + 기타 만 받는다');
+  insert into public.model_media (model_ref, media_id, view_type, path)
+    select id, 'img7', 'Rear-Quarter', 'images/k220_rq.jpg' from public.benchmark_model where model_id = 'M0001';
+  perform public._assert_eq((select count(*) from public.model_media where view_type = 'Rear-Quarter'), 1::bigint,
+    'Rear-Quarter(후면 사선) View 를 받는다 — 2026-09-30');
+  perform public._assert_eq((select count(*) from pg_constraint where conrelid = 'public.model_media'::regclass
+      and contype = 'c' and pg_get_constraintdef(oid) like '%view_type%'), 1::bigint,
+    '1-g 가 옛 View CHECK 를 지우고 하나만 남긴다(이름이 달라 둘이 겹치면 Rear-Quarter 가 막힌다)');
   perform public._assert_raises($s$insert into public.model_media (model_ref, media_id, path)
      select id, 'img1', 'dup.jpg' from public.benchmark_model where model_id = 'M0001'$s$,
     '23505', '한 모델 안에서 media_id 중복은 UNIQUE 가 막는다');
