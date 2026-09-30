@@ -347,6 +347,18 @@ pre.mail-body { white-space: pre-wrap; word-break: keep-all; overflow-wrap: brea
 .weight-grid input { width: 100%; }
 .wt-ok { color: var(--ok); }
 .wt-bad { color: var(--danger); }
+/* 「비중 조정」 패널 (2026-09-30 오후) — 기준 이름 · 막대 · 숫자 한 줄, 좁은 화면에서는 이름이 위로 */
+.wadj-label { display: grid; gap: 6px; margin: 8px 0; }
+.wadj-now { margin: 10px 0 6px; }
+.wadj-rows { display: grid; gap: 6px; }
+.wadj-row { display: grid; grid-template-columns: minmax(0, 13em) minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.wadj-row input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 32px; }
+.wadj-num { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.wadj-num input { width: 4.6em; text-align: right; }
+@media (max-width: 560px) {
+  .wadj-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .wadj-name { grid-column: 1 / -1; }
+}
 .radar-box { margin-top: 12px; }
 .radar-fig { margin: 0; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
 .radar-fig svg { flex: 1 1 320px; min-width: 0; height: auto; }

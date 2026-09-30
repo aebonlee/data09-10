@@ -1050,13 +1050,63 @@
   /* ══ 2026-09-30 — 보고서 목적별 비중 프로필 · Radar Chart (수강생 댓글 「보고서 목적별로 비중 변경 옵션」 「Radar Chart 가 필요합니다」) ══
      계산은 logic.js(WEIGHT_PRESETS · saveWeightVersion · radarSvg …). 여기서는 고르기·고치기·그리기만 합니다. */
   function weightOpts() { return { weights: L.currentWeights(db.weighting), weightLabel: L.weightLabel(db.weighting) }; }
-  function profileSelect(onChange) {
-    var s = selectEl('wprofile', db.weighting.profiles.map(function (p) {
-      return { value: p.id, label: p.name + ' v' + L.latestVersion(p).v + (p.builtin ? '' : ' (사용자)') };
-    }), db.weighting.active);
-    s.setAttribute('aria-label', '비중 프로필');
-    s.addEventListener('change', function () { db.weighting.active = s.value; save(); toast('비중 프로필을 「' + L.weightLabel(db.weighting) + '」로 바꿨습니다. 가중 점수·Radar·리포트가 이 비중으로 다시 계산됩니다.'); if (onChange) onChange(); else render(); });
-    return s;
+  /* ── 「비중 조정」 패널 (2026-09-30 오후 수강생 요청 「리포트 목적에 따라 사용자가 비중을 조정하는 옵션」) ──
+     07 Insight · 08 Report 양쪽에 같은 패널을 둡니다. 막대(0~100)나 숫자를 바꾸면 나머지 기준이 지금 비율대로 맞춰져 합계가 늘 100% 입니다(L.adjustWeight).
+     손을 떼면(change) 조정값이 바로 적용·저장되고 가중 점수·Radar·리포트가 다시 계산됩니다. 「내 비중으로 저장」은 이름 붙인 내 프로필(버전 관리)로 남깁니다. */
+  function weightAdjustPanel() {
+    var prof = L.weightProfile(db.weighting), cur = L.latestVersion(prof), adj = L.adjustedOf(db.weighting);
+    var w = L.currentWeights(db.weighting), sliders = {}, nums = {};
+    var totalEl = h('strong', { class: 'wt-ok', 'aria-live': 'polite' }, '');
+    function show() {
+      L.SCORE_AXES.forEach(function (a) { sliders[a.id].value = String(w[a.id]); nums[a.id].value = String(w[a.id]); });
+      var t = L.validateWeights(w).total; totalEl.textContent = '합계 ' + t + '%'; totalEl.className = t === 100 ? 'wt-ok' : 'wt-bad';
+    }
+    function commit(focusName) {
+      var r = L.setAdjusted(db.weighting, w);
+      if (!r.ok) { toast(r.errors.join(' '), true); return; }
+      db.weighting = r.weighting; save(); render();
+      var el = focusName && document.querySelector('[name="' + focusName + '"]'); if (el) el.focus({ preventScroll: true });
+    }
+    var rows = h('div', { class: 'wadj-rows' }, L.SCORE_AXES.map(function (a) {
+      var sl = sliders[a.id] = h('input', { type: 'range', name: 'wr_' + a.id, min: '0', max: '100', step: '1', 'aria-label': 'C' + a.no + ' ' + a.ko + ' 비중(%)' });
+      var nu = nums[a.id] = h('input', { type: 'number', name: 'wn_' + a.id, min: '0', max: '100', step: '1', inputmode: 'numeric', 'aria-label': 'C' + a.no + ' ' + a.ko + ' 비중(%) 숫자' });
+      sl.addEventListener('input', function () { w = L.adjustWeight(w, a.id, sl.value); show(); });
+      sl.addEventListener('change', function () { commit(sl.name); });
+      nu.addEventListener('change', function () { if (nu.value.trim() === '') { show(); return; } w = L.adjustWeight(w, a.id, nu.value); show(); commit(nu.name); });
+      return h('div', { class: 'wadj-row' },
+        h('span', { class: 'wadj-name' }, 'C' + a.no + ' ' + a.ko, h('small', { class: 'note' }, ' 자료 권장 ' + a.weight + '%')),
+        sl, h('span', { class: 'wadj-num' }, nu, '%'));
+    }));
+    var presets = h('div', { class: 'seg', role: 'group', 'aria-label': '리포트 목적' }, db.weighting.profiles.map(function (p) {
+      var on = p.id === prof.id;
+      return h('button', { type: 'button', class: 'btn btn-sm' + (on ? ' btn-primary' : ''), 'aria-pressed': on ? 'true' : 'false', title: p.desc || '',
+        onclick: function () { db.weighting = L.selectProfile(db.weighting, p.id); save(); toast('리포트 목적 「' + L.weightLabel(db.weighting) + '」의 비중을 출발점으로 불러왔습니다.'); render(); } },
+        p.name + (p.builtin ? '' : ' (내 비중)'));
+    }));
+    var myName = h('input', { name: 'wmyname', placeholder: '예) 임원 보고용', value: prof.builtin ? '' : prof.name });
+    var author = h('input', { name: 'wmyauthor', value: db.lastAuthor || '', placeholder: '예) 디자인팀 홍길동', autocomplete: 'name' });
+    function saveMine() {
+      var r = L.saveMyWeights(db.weighting, myName.value, { author: author.value });
+      if (!r.ok) { toast(r.errors.join(' '), true); return; }
+      db.weighting = r.weighting; db.lastAuthor = author.value.trim(); save();
+      toast(r.created ? '내 비중 「' + r.profile.name + '」을 만들었습니다(v1). 리포트 목적 버튼에 생겼습니다.' : '내 비중 「' + r.profile.name + '」을 v' + r.version.v + ' 로 저장했습니다. 이전 버전은 이력에 남습니다.');
+      render();
+    }
+    var panel = h('div', { class: 'wadj' },
+      h('p', { class: 'note' }, '① 리포트 목적을 고르면 그 비중이 출발점이 됩니다. ② 막대를 움직이거나 숫자를 넣으면 나머지 기준이 지금 비율대로 자동으로 맞춰져 합계가 늘 100% 입니다. ' +
+        '③ 바꾼 비중은 바로 가중 점수·Radar·Benchmarking Report 에 쓰이고 리포트에 그대로 인쇄됩니다. ④ 다음에도 쓰려면 이름을 적고 「내 비중으로 저장」을 눌러 주세요(같은 이름으로 다시 저장하면 v2, v3 … 로 쌓입니다).'),
+      h('p', { class: 'note' }, L.TEAM_WEIGHTS_NOTE),
+      h('div', { class: 'wadj-label' }, h('span', { class: 'note' }, '리포트 목적'), presets),
+      h('p', { class: 'wadj-now' }, '지금 비중: ', h('strong', null, L.weightLabel(db.weighting)), ' · ', totalEl,
+        adj ? h('span', { class: 'note' }, ' · 저장 전 조정값입니다. 이대로 리포트에 쓰입니다.') : h('span', { class: 'note' }, ' · ' + prof.source)),
+      rows,
+      h('div', { class: 'btn-row', style: 'margin-top:8px' },
+        h('button', { type: 'button', class: 'btn btn-sm', disabled: !adj, onclick: function () { db.weighting = L.selectProfile(db.weighting, prof.id); save(); toast('「' + prof.name + ' v' + cur.v + '」 비중으로 되돌렸습니다.'); render(); } }, '목적 비중으로 되돌리기'),
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { var eq = {}; L.SCORE_AXES.forEach(function (a) { eq[a.id] = 1; }); w = L.normalizeWeights(eq); show(); commit(); } }, '모두 똑같이(12~13%)')),
+      h('div', { class: 'form-grid', style: 'margin-top:10px' }, field('내 비중 이름', myName), field('작성자(선택)', author)),
+      h('div', { class: 'btn-row', style: 'margin-top:6px' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: saveMine }, '내 비중으로 저장')));
+    show();
+    return panel;
   }
   function weightSummary(w) { return L.SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + w[a.id]; }).join(' · '); }
   function weightCard(sc) {
@@ -1104,17 +1154,12 @@
           h('td', { class: 'note' }, weightSummary(v.weights)),
           h('td', null, latest ? null : h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { reuse(v); } }, '이 버전 다시 쓰기')));
       }))));
-    var card = h('section', { class: 'card', id: 'weights' }, h('h2', null, '보고서 목적별 비중'),
-      h('p', { class: 'note' }, '보고서 목적에 맞는 비중 프로필을 골라 주세요. 가중 점수·강약점·Radar·Benchmarking Report 가 이 비중으로 다시 계산됩니다. ' +
-        '「종합 벤치마킹」 비중은 평가 기준 자료에 적힌 값입니다. 나머지 다섯 개(외장·Cabin/HMI·CMF·사용성/안전·브랜드 아이덴티티)는 자료에 없어서 목적에 맞게 임시로 정한 예시 값입니다. ' +
-        '팀에서 보고서 목적마다 8개 기준의 중요도를 따로 정해 둔 것이 없으면 예시 값을 그대로 쓰셔도 됩니다. 정해 둔 것이 있으면 아래 「비중 고치기」에서 그 숫자로 바꿔 저장해 주세요(바꾸기 전 값은 지워지지 않고 이력에 남습니다).'),
-      h('div', { class: 'btn-row' }, field('비중 프로필', profileSelect()),
-        h('div', null, h('div', null, h('strong', null, prof.name + ' v' + cur.v), h('span', { class: 'note' }, ' · ' + prof.source)), h('div', { class: 'note' }, prof.desc || ''),
-          h('div', { class: 'note' }, weightSummary(cur.weights)))),
+    var card = h('section', { class: 'card', id: 'weights' }, h('h2', null, '비중 조정 — 리포트 목적에 맞게'),
       sugProf ? h('p', { class: 'alert info' }, 'Scope ' + sc.scope_id + ' 의 목적(' + sc.purposes.join(', ') + ')에는 「' + sugProf.name + '」 프로필이 맞습니다. ',
-        h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { db.weighting.active = sugProf.id; save(); render(); } }, '이 프로필로 바꾸기')) : null,
-      h('details', null, h('summary', null, '비중 고치기 · 버전 이력 (' + prof.versions.length + '개)'),
-        h('p', { class: 'note' }, '0~100 정수, 합계 100% 로 맞춰 주세요. 0 은 「이 보고서에서는 보지 않음」입니다. 점수는 그대로이고 가중 점수만 달라집니다.'),
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { db.weighting = L.selectProfile(db.weighting, sugProf.id); save(); render(); } }, '이 목적으로 바꾸기')) : null,
+      weightAdjustPanel(),
+      h('details', null, h('summary', null, '「' + prof.name + '」 버전 이력 · 프로필 자체 고치기 (' + prof.versions.length + '개 버전)'),
+        h('p', { class: 'note' }, '위 「비중 조정」으로 충분하면 여기는 열지 않아도 됩니다. 여기서는 고른 프로필 자체를 새 버전으로 바꿉니다(합계를 직접 100% 로 맞춰야 합니다). 0 은 「이 보고서에서는 보지 않음」입니다. 점수는 그대로이고 가중 점수만 달라집니다.'),
         grid, h('p', null, totalEl),
         h('div', { class: 'form-grid' }, field('메모', memo), field('작성자', author)),
         h('div', { class: 'btn-row', style: 'margin-top:10px' },
@@ -1262,7 +1307,9 @@
         h('div', { class: 'tiles' }, [['모델', ins.count + '건'], ['브랜드', ins.brandCount + '개'], ['평가 입력', ins.scoredCount + '건'], ['Design Tag', ins.tags.length + '종']].map(function (t) {
           return h('div', { class: 'tile' }, h('div', { class: 'k' }, t[0]), h('div', { class: 'v' }, t[1])); })),
         h('ul', null, ins.headline.map(function (x) { return h('li', null, x); })),
-        h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/report' }, 'Benchmarking Report 로 보기'), h('a', { class: 'btn', href: '#/feedback/scores' }, '점수 비교에 피드백 남기기'))),
+        h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/report' }, 'Benchmarking Report 로 보기'),
+          h('button', { type: 'button', class: 'btn', onclick: function () { var el = document.getElementById('weights'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, '비중 조정'),
+          h('a', { class: 'btn', href: '#/feedback/scores' }, '점수 비교에 피드백 남기기'))),
       weightCard(sc),
       radarCard(ins),
       h('section', { class: 'card' }, h('h2', null, '브랜드별 요약'), summaryTbl),
@@ -1308,7 +1355,8 @@
           h('button', { type: 'button', class: 'btn', onclick: exportXlsx }, 'Excel(xlsx)'),
           h('button', { type: 'button', class: 'btn', onclick: exportHtml }, 'HTML 내려받기'))),
         targetTools(),
-        h('div', { class: 'btn-row' }, field('보고서 목적(비중 프로필)', profileSelect()), h('a', { class: 'btn btn-sm', href: '#/insight' }, '비중 고치기 · 버전 이력(07 Insight)')),
+        h('section', { class: 'card', id: 'weights' }, h('h2', null, '비중 조정 — 이 리포트에 쓸 비중'), weightAdjustPanel(),
+          h('p', { class: 'note' }, h('a', { href: '#/insight' }, '버전 이력은 07 Insight 「비중 조정」 아래에 있습니다.'))),
         h('p', { class: 'note' }, 'xlsx 에는 요약·브랜드요약·점수비교·강약점·태그트렌드·선택비교·전문가피드백·운영 시트가 들어갑니다. HTML 은 파일 하나로 열리고 메일로 보내도 모양이 그대로입니다. PPTX 자동 생성은 3단계입니다.')),
       art
     ];

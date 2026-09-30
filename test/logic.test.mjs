@@ -606,6 +606,78 @@ test('addWeightProfile · restoreWeighting: 사용자 프로필 u1, 잘못된 �
   assert.equal(L.weightProfile(broken, 'cmf').versions[0].weights.ext_cmf, 25); // 망가진 버전 대신 기본값
   assert.equal(L.restoreDb({ models: [] }).weighting.active, 'full');           // 예전 저장본도 열림
 });
+test('팀 기준 비중 없음(2026-09-30 오후 답변) — 예시 프로필이 기본값으로 표기', () => {
+  assert.ok(L.TEAM_WEIGHTS_NOTE.includes('따로 정한 목적별 비중은 없습니다'));
+  assert.equal(L.WEIGHT_PRESETS.filter(p => p.source.includes('예시 값(기본값)')).length, 5);
+  assert.equal(L.defaultWeighting().adjusted, null);
+});
+test('normalizeWeights: 아무 숫자나 → 정수 · 합 100 (최대 나머지 방식)', () => {
+  const w = L.normalizeWeights({ proportion: 1, form: 1, ext_cmf: 1, int_arch: 1, int_cmf: 1, ergonomics: 1, hmi: 1, identity: 1 });
+  assert.deepEqual(Object.values(w), [13, 13, 13, 13, 12, 12, 12, 12]);
+  const x = L.normalizeWeights({ proportion: 3, form: 3, ext_cmf: 2, int_arch: 3, int_cmf: 2, ergonomics: 3, hmi: 2, identity: 2 });  // 합 20 → ×5
+  assert.deepEqual(x, L.WEIGHT_PRESETS[0].weights);
+  assert.equal(L.normalizeWeights({ proportion: 0 }), null);                    // 모두 0 은 못 맞춤
+  assert.equal(L.normalizeWeights({ proportion: -5, form: 'abc', hmi: 7 }).hmi, 100);  // 음수·글자는 0
+});
+test('adjustWeight: 하나를 바꾸면 나머지가 지금 비율대로 맞춰져 합 100', () => {
+  const full = L.WEIGHT_PRESETS[0].weights;
+  const a = L.adjustWeight(full, 'identity', 30);                            // 나머지 90 → 70 으로 비례
+  assert.equal(a.identity, 30);
+  assert.equal(Object.values(a).reduce((x, y) => x + y, 0), 100);
+  assert.ok(Object.values(a).every(v => Number.isInteger(v) && v >= 0));
+  assert.ok(a.proportion > a.ext_cmf);                                        // 15:10 비율 유지(반올림 안)
+  assert.deepEqual(L.adjustWeight(full, 'identity', 10), full);               // 그대로면 그대로
+  const all = L.adjustWeight(full, 'hmi', 100);
+  assert.equal(all.hmi, 100); assert.equal(all.form, 0);
+  const back = L.adjustWeight(all, 'hmi', 44);                                // 나머지가 모두 0 이면 똑같이 나눔
+  assert.equal(Object.values(back).reduce((x, y) => x + y, 0), 100);
+  assert.equal(back.proportion, 8); assert.equal(back.identity, 8);
+  assert.equal(L.adjustWeight(full, 'form', 250).form, 100);                  // 범위 밖은 0~100 으로
+  assert.equal(L.adjustWeight(full, 'form', 'x').form, 15);                   // 숫자 아님 → 그대로
+  assert.deepEqual(L.adjustWeight(full, 'nope', 50), full);                   // 없는 기준
+});
+test('setAdjusted · selectProfile: 조정값이 가중 점수·라벨에 쓰이고, 목적을 고르면 비워짐', () => {
+  const wg0 = L.defaultWeighting();
+  const w = L.adjustWeight(L.currentWeights(wg0), 'ergonomics', 40);
+  const r = L.setAdjusted(wg0, w);
+  assert.ok(r.ok);
+  assert.equal(wg0.adjusted, null);                                           // 원본 불변
+  assert.equal(L.currentWeights(r.weighting).ergonomics, 40);
+  assert.equal(L.weightLabel(r.weighting), '종합 벤치마킹 v1 기준 조정(저장 전)');
+  assert.equal(L.setAdjusted(wg0, L.WEIGHT_PRESETS[0].weights).weighting.adjusted, null);  // 원래 값과 같으면 조정 없음
+  assert.equal(L.setAdjusted(wg0, { ...w, hmi: 90 }).ok, false);               // 합 틀림 거절
+  const sel = L.selectProfile(r.weighting, 'cabin');
+  assert.equal(sel.adjusted, null); assert.equal(sel.active, 'cabin');
+  assert.equal(L.weightLabel(sel), 'Cabin·HMI 보고 v1');
+  // 저장본 복원 — 조정값은 살고, 바탕 프로필이 다르면 버림
+  const back = L.restoreWeighting(JSON.parse(JSON.stringify(r.weighting)));
+  assert.equal(L.currentWeights(back).ergonomics, 40);
+  assert.equal(L.restoreWeighting({ ...JSON.parse(JSON.stringify(r.weighting)), active: 'cmf' }).adjusted, null);
+  // 리포트가 조정값으로 계산하고 인쇄함
+  const rep = L.buildReport({ ...dbr, weighting: r.weighting }, { now: NOW });
+  assert.equal(rep.weighting.adjusted, true);
+  assert.equal(rep.weighting.weights.ergonomics, 40);
+  const html = L.reportHtml(rep);
+  assert.ok(html.includes('종합 벤치마킹 v1 기준 조정(저장 전)'));
+  assert.ok(html.includes('C6 인간공학 40%'));
+  assert.ok(html.includes('사용자가 이 리포트를 위해 조정한 비중'));
+});
+test('saveMyWeights: 이름 붙인 내 프로필 v1 → 같은 이름이면 v2, 기본 이름·빈 이름 거절', () => {
+  const adj = L.setAdjusted(L.defaultWeighting(), L.adjustWeight(L.WEIGHT_PRESETS[0].weights, 'identity', 30)).weighting;
+  const r1 = L.saveMyWeights(adj, '임원 보고용', { author: '디자이너A', now: NOW });
+  assert.ok(r1.ok); assert.equal(r1.created, true); assert.equal(r1.profile.id, 'u1');
+  assert.equal(r1.weighting.active, 'u1'); assert.equal(r1.weighting.adjusted, null);
+  assert.equal(L.weightLabel(r1.weighting), '임원 보고용 v1');
+  assert.equal(L.currentWeights(r1.weighting).identity, 30);
+  assert.ok(r1.version.memo.includes('종합 벤치마킹 v1'));
+  const adj2 = L.setAdjusted(r1.weighting, L.adjustWeight(L.currentWeights(r1.weighting), 'hmi', 20)).weighting;
+  const r2 = L.saveMyWeights(adj2, '임원 보고용', { now: NOW });
+  assert.ok(r2.ok); assert.equal(r2.created, false); assert.equal(r2.version.v, 2);
+  assert.equal(L.weightProfile(r2.weighting, 'u1').versions.length, 2);
+  assert.equal(L.saveMyWeights(r2.weighting, '임원 보고용').ok, false);           // v2 와 같은 값
+  assert.equal(L.saveMyWeights(adj, '종합 벤치마킹').ok, false);                   // 기본 프로필 이름
+  assert.equal(L.saveMyWeights(adj, '  ').ok, false);
+});
 test('suggestProfile: Scope 목적 하나면 그 프로필, 섞이면 종합', () => {
   assert.equal(L.suggestProfile(['Cabin']), 'cabin');
   assert.equal(L.suggestProfile(['Serviceability', 'Safety']), 'usability');

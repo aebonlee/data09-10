@@ -950,24 +950,27 @@
   /* ── 보고서 목적별 비중 프로필 (2026-09-30 수강생 요청 「보고서 목적별로 비중 변경 옵션」) ──
      평가 기준 자료 8절 「기준·가중치 버전 관리」를 따라, 비중을 바꾸면 덮어쓰지 않고 새 버전(v2, v3 …)으로 쌓습니다.
      기본 프로필 6개 중 「종합 벤치마킹」만 자료의 권장 비중이고, 나머지 5개는 자료에 없어 목적에 맞춰 임시로 정한 예시 값입니다(팀이 따로 정한 값이 없으면 그대로 써도 됨 — 2026-09-30 수강생 확인 질문).
-     팀 기준이 있으면 화면에서 고쳐 새 버전으로 저장하면 됩니다. 비중은 0~100 정수, 합 100. */
+     팀 기준이 있으면 화면에서 고쳐 새 버전으로 저장하면 됩니다. 비중은 0~100 정수, 합 100.
+     2026-09-30 오후 답변: 「따로 정해둔 것은 없습니다」 — 팀이 정한 목적별 비중이 없으므로 아래 예시 프로필이 그대로 기본값입니다(TEAM_WEIGHTS_NOTE).
+     같은 답의 요청 「리포트 목적에 따라 사용자가 비중을 조정하는 옵션」은 adjustWeight · setAdjusted · saveMyWeights(「비중 조정」 패널)로 넣었습니다. */
+  var TEAM_WEIGHTS_NOTE = '팀에서 따로 정한 목적별 비중은 없습니다(2026-09-30 수강생 답변). 그래서 아래 예시 프로필이 기본값이고, 필요하면 「비중 조정」에서 바꿔 쓰면 됩니다.';
   var WEIGHT_PRESETS = [
     { id: 'full', name: '종합 벤치마킹', purposes: ['Full Benchmark', 'Trend'], source: '평가 기준 자료 2절 권장 비중',
       desc: '신모델 방향을 넓게 볼 때. 외장·실내·사용성·아이덴티티를 자료의 권장 비중으로 봅니다.',
       weights: { proportion: 15, form: 15, ext_cmf: 10, int_arch: 15, int_cmf: 10, ergonomics: 15, hmi: 10, identity: 10 } },
-    { id: 'exterior', name: '외장 디자인 보고', purposes: ['Exterior'], source: '예시 값 — 평가 기준 자료에 없음',
+    { id: 'exterior', name: '외장 디자인 보고', purposes: ['Exterior'], source: '예시 값(기본값) — 평가 기준 자료에 없음, 팀 기준 없음',
       desc: '외관 조형 방향을 정할 때. C1~C3 과 아이덴티티(C8)를 높였습니다.',
       weights: { proportion: 20, form: 20, ext_cmf: 15, int_arch: 10, int_cmf: 5, ergonomics: 10, hmi: 5, identity: 15 } },
-    { id: 'cabin', name: 'Cabin·HMI 보고', purposes: ['Cabin'], source: '예시 값 — 평가 기준 자료에 없음',
+    { id: 'cabin', name: 'Cabin·HMI 보고', purposes: ['Cabin'], source: '예시 값(기본값) — 평가 기준 자료에 없음, 팀 기준 없음',
       desc: '캡 실내·조작계 개선 과제를 볼 때. C4~C7 을 높였습니다.',
       weights: { proportion: 5, form: 5, ext_cmf: 5, int_arch: 20, int_cmf: 15, ergonomics: 20, hmi: 20, identity: 10 } },
-    { id: 'cmf', name: 'CMF 전략 보고', purposes: ['CMF'], source: '예시 값 — 평가 기준 자료에 없음',
+    { id: 'cmf', name: 'CMF 전략 보고', purposes: ['CMF'], source: '예시 값(기본값) — 평가 기준 자료에 없음, 팀 기준 없음',
       desc: '색·소재·마감 방향을 정할 때. 외장 CMF(C3)·실내 CMF(C5)를 높였습니다.',
       weights: { proportion: 5, form: 10, ext_cmf: 25, int_arch: 10, int_cmf: 25, ergonomics: 5, hmi: 5, identity: 15 } },
-    { id: 'usability', name: '사용성·안전 보고', purposes: ['Serviceability', 'Safety'], source: '예시 값 — 평가 기준 자료에 없음',
+    { id: 'usability', name: '사용성·안전 보고', purposes: ['Serviceability', 'Safety'], source: '예시 값(기본값) — 평가 기준 자료에 없음, 팀 기준 없음',
       desc: '승하차·시야·조작 동선을 볼 때. 인간공학(C6)·HMI(C7)를 높였습니다.',
       weights: { proportion: 10, form: 10, ext_cmf: 5, int_arch: 10, int_cmf: 5, ergonomics: 30, hmi: 20, identity: 10 } },
-    { id: 'identity', name: '브랜드 아이덴티티 보고', purposes: [], source: '예시 값 — 평가 기준 자료에 없음',
+    { id: 'identity', name: '브랜드 아이덴티티 보고', purposes: [], source: '예시 값(기본값) — 평가 기준 자료에 없음, 팀 기준 없음',
       desc: '경영진·브랜드 보고처럼 차별성을 앞세울 때. C8 과 외장 표현을 높였습니다.',
       weights: { proportion: 15, form: 15, ext_cmf: 15, int_arch: 5, int_cmf: 5, ergonomics: 5, hmi: 5, identity: 35 } }
   ];
@@ -991,7 +994,7 @@
     return { id: p.id, name: p.name, desc: p.desc, purposes: p.purposes.slice(), source: p.source, builtin: true,
       versions: [{ v: 1, weights: weightMap(p.weights), saved_at: '', author: '', memo: '처음 값' }] };
   }
-  function defaultWeighting() { return { active: 'full', profiles: WEIGHT_PRESETS.map(presetProfile) }; }
+  function defaultWeighting() { return { active: 'full', profiles: WEIGHT_PRESETS.map(presetProfile), adjusted: null }; }
   /* 저장본 복원 — 기본 프로필이 빠졌으면 채우고, 잘못된 버전은 버립니다 */
   function restoreWeighting(p) {
     var out = defaultWeighting();
@@ -1007,6 +1010,9 @@
       else out.profiles.push({ id: str(x.id), name: str(x.name) || str(x.id), desc: str(x.desc), purposes: Array.isArray(x.purposes) ? x.purposes.map(str) : [], source: '사용자 추가', builtin: false, versions: vs });
     });
     if (out.profiles.some(function (y) { return y.id === p.active; })) out.active = p.active;
+    // 저장 전 조정값 — 고른 프로필을 바탕으로 한 것이고 합이 100 일 때만 살립니다
+    var adj = p.adjusted;
+    if (adj && adj.base === out.active && validateWeights(adj.weights).ok) out.adjusted = { base: out.active, weights: weightMap(adj.weights) };
     return out;
   }
   function weightProfile(weighting, id) {
@@ -1016,8 +1022,13 @@
   }
   function latestVersion(profile) { return profile.versions[profile.versions.length - 1]; }
   /* 지금 쓰는 비중 — 선택한 프로필의 마지막 버전 */
-  function currentWeights(weighting) { return weightMap(latestVersion(weightProfile(weighting)).weights); }
-  function weightLabel(weighting) { var p = weightProfile(weighting); return p.name + ' v' + latestVersion(p).v; }
+  /* 2026-09-30 오후: 「비중 조정」에서 바꾼 값(저장 전)이 있으면 그 값이 먼저입니다 */
+  function adjustedOf(weighting) {
+    var a = weighting && weighting.adjusted, p = weightProfile(weighting);
+    return a && a.base === p.id && validateWeights(a.weights).ok ? a : null;
+  }
+  function currentWeights(weighting) { var a = adjustedOf(weighting); return weightMap(a ? a.weights : latestVersion(weightProfile(weighting)).weights); }
+  function weightLabel(weighting) { var p = weightProfile(weighting); return p.name + ' v' + latestVersion(p).v + (adjustedOf(weighting) ? ' 기준 조정(저장 전)' : ''); }
   function sameWeights(a, b) { return SCORE_AXES.every(function (x) { return a[x.id] === b[x.id]; }); }
   /* 비중을 새 버전으로 저장 — 원본을 바꾸지 않고 새 weighting 을 돌려줍니다. 이전 버전은 지우지 않습니다 */
   function saveWeightVersion(weighting, profileId, weights, meta) {
@@ -1032,6 +1043,76 @@
     var v = { v: last.v + 1, weights: weightMap(weights), saved_at: stampTime(meta.now || new Date()), author: str(meta.author), memo: str(meta.memo) };
     p.versions.push(v);
     return { ok: true, weighting: wg, version: v };
+  }
+  /* ── 「비중 조정」 패널 (2026-09-30 오후 수강생 요청 「리포트 목적에 따라 사용자가 비중을 조정하는 옵션」) ──
+     아무 숫자나 넣어도 합이 100 이 되게 맞춥니다. 반올림 차이는 나머지가 큰 기준부터 1씩 채웁니다(최대 나머지 방식). */
+  function normalizeWeights(raw) {
+    var vals = SCORE_AXES.map(function (a) { var n = Number(raw && raw[a.id]); return isFinite(n) && n > 0 ? n : 0; });
+    var sum = vals.reduce(function (x, y) { return x + y; }, 0);
+    if (!(sum > 0)) return null;
+    var ints = spread(vals, sum, 100), o = {};
+    SCORE_AXES.forEach(function (a, i) { o[a.id] = ints[i]; });
+    return o;
+  }
+  // vals 를 합 total 인 정수 배열로 비례 배분 — 반올림 차이는 나머지가 큰 순(같으면 기준 순서)으로 1씩
+  function spread(vals, sum, total) {
+    var exact = vals.map(function (v) { return v * total / sum; });
+    var ints = exact.map(Math.floor), left = total - ints.reduce(function (x, y) { return x + y; }, 0);
+    exact.map(function (e, i) { return { i: i, r: e - ints[i] }; }).sort(function (a, b) { return b.r - a.r || a.i - b.i; })
+      .slice(0, left).forEach(function (x) { ints[x.i]++; });
+    return ints;
+  }
+  /* 기준 하나를 value(0~100)로 바꾸고, 남은 (100 − value)를 다른 기준에 지금 비율대로 나눕니다.
+     다른 기준이 모두 0 이면 똑같이 나눕니다. 결과는 늘 정수 · 합 100 */
+  function adjustWeight(weights, id, value) {
+    var cur = weightMap(weights), v = Math.round(Number(value));
+    if (!SCORE_AXES.some(function (a) { return a.id === id; })) return cur;
+    if (!isFinite(v)) v = cur[id];
+    v = Math.max(0, Math.min(100, v));
+    var others = SCORE_AXES.filter(function (a) { return a.id !== id; });
+    var vals = others.map(function (a) { var n = Number(cur[a.id]); return isFinite(n) && n > 0 ? n : 0; });
+    var sum = vals.reduce(function (x, y) { return x + y; }, 0);
+    if (!(sum > 0)) { vals = others.map(function () { return 1; }); sum = others.length; }
+    var ints = spread(vals, sum, 100 - v);
+    var o = {}; o[id] = v; others.forEach(function (a, i) { o[a.id] = ints[i]; });
+    return weightMap(o);
+  }
+  /* 리포트 목적(프로필)을 고르면 조정값은 비웁니다 — 새 출발점 */
+  function selectProfile(weighting, id) {
+    var wg = JSON.parse(JSON.stringify(weighting || defaultWeighting()));
+    if (wg.profiles.some(function (x) { return x.id === id; })) wg.active = id;
+    wg.adjusted = null;
+    return wg;
+  }
+  /* 조정값 적용(저장 전) — 고른 프로필의 마지막 버전과 같으면 조정 없음으로 돌아갑니다 */
+  function setAdjusted(weighting, weights) {
+    var wg = JSON.parse(JSON.stringify(weighting || defaultWeighting()));
+    var chk = validateWeights(weights);
+    if (!chk.ok) return { ok: false, errors: chk.errors, weighting: wg };
+    var p = weightProfile(wg);
+    wg.adjusted = sameWeights(latestVersion(p).weights, weights) ? null : { base: p.id, weights: weightMap(weights) };
+    return { ok: true, weighting: wg };
+  }
+  /* 「내 비중으로 저장」 — 지금 쓰는 비중(조정값 포함)을 이름 붙인 내 프로필로 저장.
+     같은 이름의 내 프로필이 있으면 새 버전(v2, v3 …)으로 쌓고, 없으면 새로 만듭니다. 기본 프로필 이름은 쓸 수 없습니다 */
+  function saveMyWeights(weighting, name, meta) {
+    meta = meta || {};
+    var nm = str(name), w = currentWeights(weighting), wg = weighting || defaultWeighting();
+    if (!nm) return { ok: false, errors: ['「내 비중」 이름을 적어 주세요. 예) 임원 보고용'] };
+    var same = wg.profiles.filter(function (x) { return x.name === nm; })[0];
+    var base = weightProfile(wg), r;
+    var memo = str(meta.memo) || (adjustedOf(wg) ? '「' + base.name + ' v' + latestVersion(base).v + '」에서 조정' : '「' + base.name + ' v' + latestVersion(base).v + '」 값 그대로');
+    if (same && same.builtin) return { ok: false, errors: ['「' + nm + '」은 기본 프로필 이름입니다. 다른 이름을 적어 주세요.'] };
+    if (same) {
+      r = saveWeightVersion(wg, same.id, w, { author: meta.author, memo: memo, now: meta.now });
+      if (!r.ok) return r;
+      r.weighting.active = same.id; r.weighting.adjusted = null;
+      return { ok: true, weighting: r.weighting, profile: weightProfile(r.weighting, same.id), version: r.version, created: false };
+    }
+    r = addWeightProfile(wg, nm, w, { author: meta.author, memo: memo, now: meta.now, desc: meta.desc || '「' + base.name + '」에서 출발해 조정한 내 비중' });
+    if (!r.ok) return r;
+    r.weighting.active = r.profile.id; r.weighting.adjusted = null;
+    return { ok: true, weighting: r.weighting, profile: r.profile, version: r.profile.versions[0], created: true };
   }
   /* 새 프로필 — 이름이 겹치면 거절. id 는 u1, u2 … */
   function addWeightProfile(weighting, name, weights, meta) {
@@ -1482,8 +1563,10 @@
     return {
       title: (tc ? tc.name : opts.equipment_type ? opts.equipment_type : '전체 장비') + ' Design Benchmark',
       generated_at: stampTime(now), schema_version: SCHEMA_VERSION, sample: !!db._sample,
-      weighting: { id: wprof.id, name: wprof.name, version: wver.v, label: weightLabel(db.weighting), source: wprof.source, desc: wprof.desc,
-        weights: weightMap(wver.weights), saved_at: wver.saved_at, memo: wver.memo, versions: wprof.versions.length },
+      weighting: { id: wprof.id, name: wprof.name, version: wver.v, label: weightLabel(db.weighting), desc: wprof.desc,
+        adjusted: !!adjustedOf(db.weighting),
+        source: adjustedOf(db.weighting) ? '사용자가 이 리포트를 위해 조정한 비중 · 출발점 「' + wprof.name + ' v' + wver.v + '」' : wprof.source,
+        weights: currentWeights(db.weighting), saved_at: adjustedOf(db.weighting) ? '' : wver.saved_at, memo: adjustedOf(db.weighting) ? '' : wver.memo, versions: wprof.versions.length },
       scope: sc ? { scope_id: sc.scope_id, equipment_type: sc.equipment_type, tonnage: tc ? tc.name + ' (' + tc.range + ')' : sc.tonnage_class,
         brands: sc.brands.map(brandShort), purposes: sc.purposes.slice() } : null,
       filterLabel: sc ? 'Scope ' + sc.scope_id : opts.equipment_type ? opts.equipment_type + ' 전체' : '전체 자료',
@@ -1692,6 +1775,9 @@
     weightMap: weightMap, validateWeights: validateWeights, cleanWeights: cleanWeights, defaultWeighting: defaultWeighting, restoreWeighting: restoreWeighting,
     weightProfile: weightProfile, latestVersion: latestVersion, currentWeights: currentWeights, weightLabel: weightLabel,
     saveWeightVersion: saveWeightVersion, addWeightProfile: addWeightProfile, suggestProfile: suggestProfile,
+    /* 2026-09-30 오후 — 「비중 조정」 패널 */
+    TEAM_WEIGHTS_NOTE: TEAM_WEIGHTS_NOTE, normalizeWeights: normalizeWeights, adjustWeight: adjustWeight,
+    selectProfile: selectProfile, setAdjusted: setAdjusted, saveMyWeights: saveMyWeights, adjustedOf: adjustedOf,
     radarSvg: radarSvg, radarSeries: radarSeries, radarAxes: radarAxes,
     reportModels: reportModels, buildReport: buildReport, reportSheets: reportSheets, reportBodyHtml: reportBodyHtml, reportHtml: reportHtml, esc: esc
   };
