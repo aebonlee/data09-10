@@ -747,7 +747,7 @@
   /* ── DB (브라우저 저장소 한 덩어리) ── */
   function emptyDb() {
     return { models: [], scopes: [], activeScope: '', compare: [], settings: { imageMaxPx: 800, imageQuality: 0.8 },
-      feedback: [], ops: defaultOps(), insightNote: { text: '', origin: '', saved_at: '' }, lastAuthor: '' };
+      feedback: [], ops: defaultOps(), insightNote: { text: '', origin: '', saved_at: '' }, lastAuthor: '', weighting: defaultWeighting() };
   }
   function restoreDb(p) {
     var db = emptyDb();
@@ -766,6 +766,7 @@
     db.ops = restoreOps(p.ops);
     if (p.insightNote && typeof p.insightNote === 'object') db.insightNote = { text: str(p.insightNote.text), origin: str(p.insightNote.origin), saved_at: str(p.insightNote.saved_at) };
     if (typeof p.lastAuthor === 'string') db.lastAuthor = p.lastAuthor;
+    db.weighting = restoreWeighting(p.weighting);
     if (p._sample) db._sample = true;
     return db;
   }
@@ -811,9 +812,11 @@
     return validScore(m[a.key]) != null ? 'designer' : validScore(m[a.aiKey]) != null ? 'ai' : '';
   }
   /* 가중 점수 — 평가한 기준의 비중으로 다시 나눕니다(빈 기준이 0 점처럼 끌어내리지 않게). coverage = 평가한 비중 합(%) */
-  function weightedScore(scores) {
+  /* weights: { 기준 id: 비중(%) } — 없으면 평가 기준 자료의 권장 비중(2026-09-30 목적별 비중 프로필) */
+  function wOf(a, weights) { return weights && typeof weights[a.id] === 'number' ? weights[a.id] : a.weight; }
+  function weightedScore(scores, weights) {
     var sw = 0, sum = 0;
-    SCORE_AXES.forEach(function (a) { var v = scores[a.key]; if (typeof v === 'number') { sw += a.weight; sum += a.weight * v; } });
+    SCORE_AXES.forEach(function (a) { var v = scores[a.key], w = wOf(a, weights); if (typeof v === 'number' && w > 0) { sw += w; sum += w * v; } });
     return { value: sw ? Math.round(sum / sw * 100) / 100 : null, coverage: sw };
   }
   function modelScores(m) { var sc = {}; SCORE_AXES.forEach(function (a) { sc[a.key] = scoreOf(m, a.key); }); return sc; }
@@ -848,7 +851,7 @@
   }
 
   /* 브랜드별 요약 — 모델 수·평가 평균·제원 범위·자주 쓰인 태그·최근 수집일 */
-  function brandSummary(models) {
+  function brandSummary(models, wts) {
     var names = models.map(function (m) { return m.brand; }).filter(function (b, i, a) { return b && a.indexOf(b) === i; });
     return brandOrder(names).map(function (b) {
       var mine = models.filter(function (m) { return m.brand === b; });
@@ -859,7 +862,7 @@
       return {
         brand: b, short: brandShort(b), models: mine.length,
         scored: mine.filter(function (m) { return SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
-        scores: scores, overall: weightedScore(scores).value,
+        scores: scores, overall: weightedScore(scores, wts).value,
         weight: weights.length ? { min: round1(Math.min.apply(null, weights)), max: round1(Math.max.apply(null, weights)) } : null,
         power: round1(mean(mine.map(function (m) { return m.engine_power === '' ? null : Number(m.engine_power); }))),
         pwr: round2(mean(mine.map(powerPerTon))),
@@ -873,14 +876,14 @@
   }
 
   /* 점수 비교 — 축별 전체 평균(모델 단위)과 브랜드 평균의 차이 */
-  function scoreComparison(models, summary) {
-    var rows = summary || brandSummary(models);
+  function scoreComparison(models, summary, weights) {
+    var rows = summary || brandSummary(models, weights);
     var axes = SCORE_AXES.map(function (a) {
       var vals = models.map(function (m) { return scoreOf(m, a.key); }).filter(function (x) { return x != null; });
       var avg = round2(mean(vals));
       var best = null;
       rows.forEach(function (r) { var v = r.scores[a.key]; if (v != null && (!best || v > best.value)) best = { brand: r.brand, value: v }; });
-      return { key: a.key, no: a.no, axis: a.axis, name: a.name, ko: a.ko, weight: a.weight, group: a.group, avg: avg, n: vals.length, best: best };
+      return { key: a.key, id: a.id, no: a.no, axis: a.axis, name: a.name, ko: a.ko, weight: wOf(a, weights), group: a.group, avg: avg, n: vals.length, best: best };
     });
     var table = rows.map(function (r) {
       var diff = {};
@@ -895,8 +898,8 @@
   function strengthsWeaknesses(models, opts) {
     opts = opts || {};
     var th = opts.threshold == null ? 0.5 : opts.threshold;
-    var summary = opts.summary || brandSummary(models);
-    var cmp = scoreComparison(models, summary);
+    var summary = opts.summary || brandSummary(models, opts.weights);
+    var cmp = scoreComparison(models, summary, opts.weights);
     var pwrAll = mean(models.map(powerPerTon));
     return summary.map(function (r) {
       var s = [], w = [], notes = [];
@@ -942,12 +945,191 @@
       .map(function (a) { return { key: a.key, name: 'C' + a.no + ' ' + a.name, avg: a.avg, best: a.best, open: !a.best || a.best.value < 4 }; });
   }
 
+  /* ── 보고서 목적별 비중 프로필 (2026-09-30 수강생 요청 「보고서 목적별로 비중 변경 옵션」) ──
+     평가 기준 자료 8절 「기준·가중치 버전 관리」를 따라, 비중을 바꾸면 덮어쓰지 않고 새 버전(v2, v3 …)으로 쌓습니다.
+     기본 프로필 6개 중 「종합 벤치마킹」만 자료의 권장 비중이고, 나머지 5개는 목적에 맞춰 우리가 잡은 예시(가정)입니다.
+     팀 기준이 있으면 화면에서 고쳐 새 버전으로 저장하면 됩니다. 비중은 0~100 정수, 합 100. */
+  var WEIGHT_PRESETS = [
+    { id: 'full', name: '종합 벤치마킹', purposes: ['Full Benchmark', 'Trend'], source: '평가 기준 자료 2절 권장 비중',
+      desc: '신모델 방향을 넓게 볼 때. 외장·실내·사용성·아이덴티티를 자료의 권장 비중으로 봅니다.',
+      weights: { proportion: 15, form: 15, ext_cmf: 10, int_arch: 15, int_cmf: 10, ergonomics: 15, hmi: 10, identity: 10 } },
+    { id: 'exterior', name: '외장 디자인 보고', purposes: ['Exterior'], source: '예시(가정)',
+      desc: '외관 조형 방향을 정할 때. C1~C3 과 아이덴티티(C8)를 높였습니다.',
+      weights: { proportion: 20, form: 20, ext_cmf: 15, int_arch: 10, int_cmf: 5, ergonomics: 10, hmi: 5, identity: 15 } },
+    { id: 'cabin', name: 'Cabin·HMI 보고', purposes: ['Cabin'], source: '예시(가정)',
+      desc: '캡 실내·조작계 개선 과제를 볼 때. C4~C7 을 높였습니다.',
+      weights: { proportion: 5, form: 5, ext_cmf: 5, int_arch: 20, int_cmf: 15, ergonomics: 20, hmi: 20, identity: 10 } },
+    { id: 'cmf', name: 'CMF 전략 보고', purposes: ['CMF'], source: '예시(가정)',
+      desc: '색·소재·마감 방향을 정할 때. 외장 CMF(C3)·실내 CMF(C5)를 높였습니다.',
+      weights: { proportion: 5, form: 10, ext_cmf: 25, int_arch: 10, int_cmf: 25, ergonomics: 5, hmi: 5, identity: 15 } },
+    { id: 'usability', name: '사용성·안전 보고', purposes: ['Serviceability', 'Safety'], source: '예시(가정)',
+      desc: '승하차·시야·조작 동선을 볼 때. 인간공학(C6)·HMI(C7)를 높였습니다.',
+      weights: { proportion: 10, form: 10, ext_cmf: 5, int_arch: 10, int_cmf: 5, ergonomics: 30, hmi: 20, identity: 10 } },
+    { id: 'identity', name: '브랜드 아이덴티티 보고', purposes: [], source: '예시(가정)',
+      desc: '경영진·브랜드 보고처럼 차별성을 앞세울 때. C8 과 외장 표현을 높였습니다.',
+      weights: { proportion: 15, form: 15, ext_cmf: 15, int_arch: 5, int_cmf: 5, ergonomics: 5, hmi: 5, identity: 35 } }
+  ];
+  function weightMap(w) { var o = {}; SCORE_AXES.forEach(function (a) { o[a.id] = wOf(a, w); }); return o; }
+  function validateWeights(w) {
+    var errors = [], total = 0;
+    SCORE_AXES.forEach(function (a) {
+      var v = w ? w[a.id] : undefined;
+      if (typeof v !== 'number' || !isFinite(v) || v !== Math.round(v) || v < 0 || v > 100) errors.push('C' + a.no + ' 비중은 0~100 정수로 적어 주세요.');
+      else total += v;
+    });
+    if (!errors.length && total !== 100) errors.push('비중 합계가 ' + total + '% 입니다. 100% 가 되게 맞춰 주세요.');
+    return { ok: !errors.length, errors: errors, total: total };
+  }
+  function cleanWeights(w) {
+    var o = {};
+    SCORE_AXES.forEach(function (a) { var n = Number(w && w[a.id]); o[a.id] = isFinite(n) && String(w && w[a.id]).trim() !== '' ? n : NaN; });
+    return o;
+  }
+  function presetProfile(p) {
+    return { id: p.id, name: p.name, desc: p.desc, purposes: p.purposes.slice(), source: p.source, builtin: true,
+      versions: [{ v: 1, weights: weightMap(p.weights), saved_at: '', author: '', memo: '처음 값' }] };
+  }
+  function defaultWeighting() { return { active: 'full', profiles: WEIGHT_PRESETS.map(presetProfile) }; }
+  /* 저장본 복원 — 기본 프로필이 빠졌으면 채우고, 잘못된 버전은 버립니다 */
+  function restoreWeighting(p) {
+    var out = defaultWeighting();
+    if (!p || typeof p !== 'object' || !Array.isArray(p.profiles)) return out;
+    p.profiles.forEach(function (x) {
+      if (!x || !str(x.id) || !Array.isArray(x.versions)) return;
+      var vs = x.versions.filter(function (v) { return v && validateWeights(v.weights).ok; }).map(function (v) {
+        return { v: Number(v.v) || 1, weights: weightMap(v.weights), saved_at: str(v.saved_at), author: str(v.author), memo: str(v.memo) };
+      });
+      if (!vs.length) return;
+      var hit = out.profiles.filter(function (y) { return y.id === x.id; })[0];
+      if (hit) hit.versions = vs;
+      else out.profiles.push({ id: str(x.id), name: str(x.name) || str(x.id), desc: str(x.desc), purposes: Array.isArray(x.purposes) ? x.purposes.map(str) : [], source: '사용자 추가', builtin: false, versions: vs });
+    });
+    if (out.profiles.some(function (y) { return y.id === p.active; })) out.active = p.active;
+    return out;
+  }
+  function weightProfile(weighting, id) {
+    var wg = weighting || defaultWeighting();
+    var key = id || wg.active;
+    return wg.profiles.filter(function (x) { return x.id === key; })[0] || wg.profiles[0];
+  }
+  function latestVersion(profile) { return profile.versions[profile.versions.length - 1]; }
+  /* 지금 쓰는 비중 — 선택한 프로필의 마지막 버전 */
+  function currentWeights(weighting) { return weightMap(latestVersion(weightProfile(weighting)).weights); }
+  function weightLabel(weighting) { var p = weightProfile(weighting); return p.name + ' v' + latestVersion(p).v; }
+  function sameWeights(a, b) { return SCORE_AXES.every(function (x) { return a[x.id] === b[x.id]; }); }
+  /* 비중을 새 버전으로 저장 — 원본을 바꾸지 않고 새 weighting 을 돌려줍니다. 이전 버전은 지우지 않습니다 */
+  function saveWeightVersion(weighting, profileId, weights, meta) {
+    meta = meta || {};
+    var chk = validateWeights(weights);
+    if (!chk.ok) return { ok: false, errors: chk.errors };
+    var wg = JSON.parse(JSON.stringify(weighting || defaultWeighting()));
+    var p = wg.profiles.filter(function (x) { return x.id === profileId; })[0];
+    if (!p) return { ok: false, errors: ['프로필을 찾지 못했습니다.'] };
+    var last = latestVersion(p);
+    if (sameWeights(last.weights, weights)) return { ok: false, errors: ['v' + last.v + ' 과 같은 비중이라 새 버전을 만들지 않았습니다.'] };
+    var v = { v: last.v + 1, weights: weightMap(weights), saved_at: stampTime(meta.now || new Date()), author: str(meta.author), memo: str(meta.memo) };
+    p.versions.push(v);
+    return { ok: true, weighting: wg, version: v };
+  }
+  /* 새 프로필 — 이름이 겹치면 거절. id 는 u1, u2 … */
+  function addWeightProfile(weighting, name, weights, meta) {
+    meta = meta || {};
+    var nm = str(name);
+    var wg = JSON.parse(JSON.stringify(weighting || defaultWeighting()));
+    if (!nm) return { ok: false, errors: ['프로필 이름을 적어 주세요.'] };
+    if (wg.profiles.some(function (x) { return x.name === nm; })) return { ok: false, errors: ['같은 이름의 프로필이 있습니다.'] };
+    var chk = validateWeights(weights);
+    if (!chk.ok) return { ok: false, errors: chk.errors };
+    var n = 1; while (wg.profiles.some(function (x) { return x.id === 'u' + n; })) n++;
+    var p = { id: 'u' + n, name: nm, desc: str(meta.desc), purposes: [], source: '사용자 추가', builtin: false,
+      versions: [{ v: 1, weights: weightMap(weights), saved_at: stampTime(meta.now || new Date()), author: str(meta.author), memo: str(meta.memo) || '새 프로필' }] };
+    wg.profiles.push(p);
+    return { ok: true, weighting: wg, profile: p };
+  }
+  /* Scope 의 Benchmark Purpose 로 권할 프로필 — 목적이 하나로 모일 때만 권하고, 섞이면 「종합」 */
+  function suggestProfile(purposes) {
+    var list = (purposes || []).filter(Boolean);
+    if (!list.length) return '';
+    var hits = WEIGHT_PRESETS.filter(function (p) { return list.some(function (x) { return p.purposes.indexOf(x) >= 0; }); });
+    if (hits.length === 1 && list.every(function (x) { return hits[0].purposes.indexOf(x) >= 0; })) return hits[0].id;
+    return 'full';
+  }
+
+  /* ── Radar Chart (2026-09-30 수강생 요청, 평가 기준 자료 7절 「8-Criteria Scorecard — Radar」) ──
+     외부 라이브러리 없이 SVG 문자열을 만듭니다. 화면과 내려받는 리포트 HTML 이 같은 함수를 씁니다.
+     series: [{ name, color, values: [기준 순서대로 점수 또는 null], dashed }]. 비어 있는 기준은 점을 찍지 않고 이웃 점끼리 잇습니다(범례에 「미평가」 표시). */
+  var RADAR_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+  var RADAR_MAX_SERIES = 6;
+  function radarPoint(cx, cy, r, i, n) {
+    var ang = -Math.PI / 2 + i * 2 * Math.PI / n;
+    return [Math.round((cx + r * Math.cos(ang)) * 10) / 10, Math.round((cy + r * Math.sin(ang)) * 10) / 10];
+  }
+  function radarSvg(opts) {
+    opts = opts || {};
+    var axes = opts.axes || SCORE_AXES.map(function (a) { return { label: 'C' + a.no + ' ' + a.ko, sub: a.weight + '%' }; });
+    var series = (opts.series || []).slice(0, RADAR_MAX_SERIES + 1);
+    var n = axes.length, max = opts.max || SCORE_MAX, size = opts.size || 420;
+    var cx = size / 2, cy = size / 2, R = size / 2 - 78, P = [];
+    P.push('<svg xmlns="http://www.w3.org/2000/svg" class="radar" viewBox="0 0 ' + size + ' ' + size + '" width="100%" style="max-width:' + size + 'px" role="img" aria-label="' +
+      esc(opts.title || 'Radar Chart') + '">');
+    P.push('<title>' + esc(opts.title || 'Radar Chart') + '</title>');
+    for (var k = 1; k <= max; k++) {
+      var ring = []; for (var i = 0; i < n; i++) ring.push(radarPoint(cx, cy, R * k / max, i, n).join(','));
+      P.push('<polygon points="' + ring.join(' ') + '" fill="none" stroke="#d6dde6" stroke-width="1"/>');
+      var lp = radarPoint(cx, cy, R * k / max, 0, n);
+      P.push('<text x="' + (lp[0] + 4) + '" y="' + (lp[1] + 4) + '" font-size="10" fill="#56616f">' + k + '</text>');
+    }
+    axes.forEach(function (a, i) {
+      var e = radarPoint(cx, cy, R, i, n), t = radarPoint(cx, cy, R + 16, i, n);
+      var anchor = Math.abs(t[0] - cx) < 4 ? 'middle' : t[0] > cx ? 'start' : 'end';
+      var dy = t[1] < cy - R * 0.9 ? -14 : t[1] > cy + R * 0.9 ? 12 : 0;
+      P.push('<line x1="' + cx + '" y1="' + cy + '" x2="' + e[0] + '" y2="' + e[1] + '" stroke="#d6dde6" stroke-width="1"/>');
+      P.push('<text x="' + t[0] + '" y="' + (t[1] + dy) + '" text-anchor="' + anchor + '" font-size="11" fill="#16202c">' + esc(a.label) +
+        (a.sub ? '<tspan x="' + t[0] + '" dy="13" fill="#56616f" font-size="10">' + esc(a.sub) + '</tspan>' : '') + '</text>');
+    });
+    series.forEach(function (s, si) {
+      var color = s.color || RADAR_COLORS[si % RADAR_COLORS.length];
+      var pts = [];
+      (s.values || []).forEach(function (v, i) { if (typeof v === 'number' && isFinite(v)) pts.push({ i: i, v: v, p: radarPoint(cx, cy, R * Math.max(0, Math.min(v, max)) / max, i, n) }); });
+      if (!pts.length) return;
+      var path = pts.map(function (x) { return x.p.join(','); }).join(' ');
+      P.push('<g class="radar-s" data-name="' + esc(s.name) + '">');
+      P.push((pts.length >= 3 ? '<polygon' : '<polyline') + ' points="' + path + '" fill="' + (s.dashed || pts.length < 3 ? 'none' : color) + '" fill-opacity="0.08" stroke="' + color + '" stroke-width="2"' +
+        (s.dashed ? ' stroke-dasharray="5 4"' : '') + ' stroke-linejoin="round"/>');
+      if (!s.dashed) pts.forEach(function (x) {
+        P.push('<circle cx="' + x.p[0] + '" cy="' + x.p[1] + '" r="4" fill="' + color + '" stroke="#ffffff" stroke-width="2"><title>' +
+          esc(s.name + ' · ' + axes[x.i].label + ' ' + x.v) + '</title></circle>');
+      });
+      P.push('</g>');
+    });
+    P.push('</svg>');
+    var legend = series.map(function (s, si) {
+      var color = s.color || RADAR_COLORS[si % RADAR_COLORS.length];
+      var miss = (s.values || []).map(function (v, i) { return typeof v === 'number' ? null : axes[i].label.split(' ')[0]; }).filter(Boolean);
+      return '<li><span class="radar-key" style="border-color:' + color + (s.dashed ? ';border-top-style:dashed' : '') + '"></span>' + esc(s.name) +
+        (miss.length === n ? ' <span class="muted">(점수 없음)</span>' : miss.length ? ' <span class="muted">(미평가 ' + esc(miss.join('·')) + ')</span>' : '') + '</li>';
+    }).join('');
+    return '<figure class="radar-fig">' + P.join('') + '<figcaption><ul class="radar-legend">' + legend + '</ul></figcaption></figure>';
+  }
+  /* 인사이트에서 Radar 계열 만들기 — 브랜드 평균(기준 순서) + 기준 평균(점선). brands 를 주면 그 브랜드만, 색은 colors[브랜드] */
+  function radarSeries(ins, brands, colors) {
+    var rows = ins.scores.rows.filter(function (r) { return !brands || brands.indexOf(r.brand) >= 0; }).slice(0, RADAR_MAX_SERIES);
+    var out = rows.map(function (r, i) {
+      return { name: r.short + (r.overall == null ? '' : ' (' + r.overall + '점)'), brand: r.brand, color: colors && colors[r.brand] || RADAR_COLORS[i % RADAR_COLORS.length],
+        values: SCORE_AXES.map(function (a) { return r.scores[a.key]; }) };
+    });
+    if (ins.scores.axes.some(function (a) { return a.avg != null; }))
+      out.push({ name: '기준 평균', color: '#56616f', dashed: true, values: ins.scores.axes.map(function (a) { return a.avg; }) });
+    return out;
+  }
+  function radarAxes(ins) { return ins.scores.axes.map(function (a) { return { label: 'C' + a.no + ' ' + a.ko, sub: a.weight + '%' }; }); }
+
   /* 디자인 평가 — 모델별 8기준 최종 점수와 가중 점수(07 화면의 평가 표와 같은 내용). 리포트 2번 항목과 Insight 의 바탕 */
-  function modelEvaluations(models) {
+  function modelEvaluations(models, weights) {
     return brandOrder(models.map(function (m) { return m.brand; }).filter(function (b, i, a) { return a.indexOf(b) === i; }))
       .reduce(function (out, b) {
         return out.concat(models.filter(function (m) { return m.brand === b; }).map(function (m) {
-          var sc = modelScores(m), w = weightedScore(sc);
+          var sc = modelScores(m), w = weightedScore(sc, weights);
           var rated = SCORE_AXES.filter(function (a) { return sc[a.key] != null; });
           var src = {}; SCORE_AXES.forEach(function (a) { src[a.key] = scoreSource(m, a.key); });
           return { id: m.id, brand: m.brand, short: brandShort(m.brand), model_name: m.model_name, tonnage_class: m.tonnage_class,
@@ -958,16 +1140,19 @@
         }));
       }, []);
   }
-  function buildInsight(models) {
-    var evals = modelEvaluations(models);
-    var summary = brandSummary(models);
-    var cmp = scoreComparison(models, summary);
-    var sw = strengthsWeaknesses(models, { summary: summary });
+  /* opts.weights: 비중 프로필의 현재 비중, opts.weightLabel: 「프로필 이름 vN」(머리 요약에 적음) */
+  function buildInsight(models, opts) {
+    opts = opts || {};
+    var wts = opts.weights || null;
+    var evals = modelEvaluations(models, wts);
+    var summary = brandSummary(models, wts);
+    var cmp = scoreComparison(models, summary, wts);
+    var sw = strengthsWeaknesses(models, { summary: summary, weights: wts });
     var tags = tagTrends(models);
     var ws = whiteSpace(cmp);
     var head = [];
     var rated = evals.filter(function (e) { return e.rated; });
-    if (models.length) head.push('디자인 평가: 모델 ' + models.length + '건 중 ' + rated.length + '건 평가(8기준 모두 입력 ' + evals.filter(function (e) { return e.complete; }).length + '건), 척도 ' + SCORE_MIN + '~' + SCORE_MAX + '점 · 가중 점수(비중 합 100%).' +
+    if (models.length) head.push('디자인 평가: 모델 ' + models.length + '건 중 ' + rated.length + '건 평가(8기준 모두 입력 ' + evals.filter(function (e) { return e.complete; }).length + '건), 척도 ' + SCORE_MIN + '~' + SCORE_MAX + '점 · 가중 점수(비중 합 100%' + (opts.weightLabel ? ', 비중 프로필 「' + opts.weightLabel + '」' : '') + ').' +
       (evals.some(function (e) { return e.aiOnly; }) ? ' 디자이너 검증 전 AI 점수가 ' + evals.reduce(function (n, e) { return n + e.aiOnly; }, 0) + '칸 섞여 있습니다.' : ''));
     var topM = rated.slice().sort(function (a, b) { return b.avg - a.avg; });
     if (topM.length) head.push('가중 점수가 가장 높은 모델은 ' + topM[0].short + ' ' + topM[0].model_name + '(' + topM[0].avg + '점)' +
@@ -981,7 +1166,8 @@
     return {
       count: models.length, brandCount: summary.length,
       scoredCount: models.filter(function (m) { return SCORE_AXES.some(function (a) { return scoreOf(m, a.key) != null; }); }).length,
-      evaluations: evals, summary: summary, scores: cmp, sw: sw, tags: tags, whitespace: ws, headline: head
+      evaluations: evals, summary: summary, scores: cmp, sw: sw, tags: tags, whitespace: ws, headline: head,
+      weights: weightMap(wts), weightLabel: opts.weightLabel || ''
     };
   }
 
@@ -996,6 +1182,7 @@
     L.push('1) 주요 디자인 트렌드 3가지  2) 브랜드별 포지셔닝 한 줄씩  3) White Space(차별화 기회)  4) 다음 조사에서 보완할 자료');
     L.push('');
     L.push('[범위] ' + (scope ? scope.scope_id + ' · ' + scope.equipment_type + ' · ' + scope.tonnage_class : '전체 자료') + ' · 모델 ' + ins.count + '건 · 브랜드 ' + ins.brandCount + '개');
+    if (ins.weightLabel) L.push('[비중 프로필] ' + ins.weightLabel + ' — 보고서 목적에 맞춘 비중입니다.');
     L.push('[평가 기준·가중치·기준 평균] ' + ins.scores.axes.map(function (a) { return a.axis + '(' + a.weight + '%) ' + (a.avg == null ? '-' : a.avg); }).join(' / '));
     L.push('[브랜드별 기준 점수 · 가중 점수 · 출력대비중량(kW/t) · 주요 태그]');
     ins.summary.forEach(function (r) {
@@ -1284,7 +1471,8 @@
     var now = opts.now || new Date();
     var sc = opts.useScope === false ? null : activeScope(db);
     var models = reportModels(db, opts);
-    var ins = buildInsight(models);
+    var wprof = weightProfile(db.weighting), wver = latestVersion(wprof);
+    var ins = buildInsight(models, { weights: currentWeights(db.weighting), weightLabel: weightLabel(db.weighting) });
     var ids = models.map(function (m) { return m.id; });
     var cmpModels = (db.compare || []).map(function (id) { return db.models.filter(function (m) { return m.id === id; })[0]; }).filter(Boolean);
     var fb = (db.feedback || []).filter(function (x) { return x.target.indexOf('model:') !== 0 || ids.indexOf(x.target.slice(6)) >= 0; });
@@ -1292,6 +1480,8 @@
     return {
       title: (tc ? tc.name : opts.equipment_type ? opts.equipment_type : '전체 장비') + ' Design Benchmark',
       generated_at: stampTime(now), schema_version: SCHEMA_VERSION, sample: !!db._sample,
+      weighting: { id: wprof.id, name: wprof.name, version: wver.v, label: weightLabel(db.weighting), source: wprof.source, desc: wprof.desc,
+        weights: weightMap(wver.weights), saved_at: wver.saved_at, memo: wver.memo, versions: wprof.versions.length },
       scope: sc ? { scope_id: sc.scope_id, equipment_type: sc.equipment_type, tonnage: tc ? tc.name + ' (' + tc.range + ')' : sc.tonnage_class,
         brands: sc.brands.map(brandShort), purposes: sc.purposes.slice() } : null,
       filterLabel: sc ? 'Scope ' + sc.scope_id : opts.equipment_type ? opts.equipment_type + ' 전체' : '전체 자료',
@@ -1323,11 +1513,13 @@
       ['장비군 · 톤급', rep.scope ? rep.scope.equipment_type + ' · ' + rep.scope.tonnage : '-'],
       ['Scope 경쟁사', rep.scope ? rep.scope.brands.join(', ') : '-'], ['목적', rep.scope ? rep.scope.purposes.join(', ') : '-'],
       ['모델', o.models], ['브랜드', o.brands], ['이미지', o.images], ['필수 메타 누락', o.incomplete], ['검증 확정', o.confirmed], ['평가 점수 입력', o.scored],
+      ['비중 프로필', rep.weighting.label + ' (' + rep.weighting.source + ')'],
+      ['비중', SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + rep.weighting.weights[a.id] + '%'; }).join(' · ')],
       ['schema_version', rep.schema_version], ['예시 데이터', rep.sample ? '예 — 모두 가상 값' : '아니오'], [],
       ['주요 인사이트']
     ].concat(rep.insight.headline.map(function (x) { return ['', x]; }))
       .concat(rep.note ? [[], ['요약 코멘트 (' + (rep.note.origin || '작성') + ', ' + rep.note.saved_at + ')', rep.note.text]] : []) });
-    out.push({ name: '디자인평가', aoa: [['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.name + ' (' + a.weight + '%)'; })).concat(['가중 점수', '평가 비중(%)', '평가 기준 수', 'AI 미검증 칸', 'Design Tag', '검증 상태', '근거 / 코멘트'])]
+    out.push({ name: '디자인평가', aoa: [['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.name + ' (' + rep.weighting.weights[a.id] + '%)'; })).concat(['가중 점수', '평가 비중(%)', '평가 기준 수', 'AI 미검증 칸', 'Design Tag', '검증 상태', '근거 / 코멘트'])]
       .concat(rep.insight.evaluations.map(function (e) {
         return [e.short, e.model_name].concat(SCORE_AXES.map(function (a) { return e.scores[a.key] == null ? '' : e.scores[a.key] + (e.source[a.key] === 'ai' ? ' (AI)' : ''); }))
           .concat([fmtScore(e.avg), e.coverage, e.rated, e.aiOnly, e.tags.join(', '), e.review, SCORE_AXES.filter(function (a) { return e.notes[a.key]; }).map(function (a) { return 'C' + a.no + ': ' + e.notes[a.key]; }).join(' / ')]);
@@ -1381,6 +1573,9 @@
     '.rp td.n{text-align:right;white-space:nowrap}.rp td.up{background:#e3f4e8}.rp td.down{background:#fde8e6}.rp tr.diff td{background:#fff9e0}',
     '.rp ul{margin:4px 0 0;padding-left:20px}.rp .rp-sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}',
     '.rp .rp-card{border:1px solid #d6dde6;border-radius:8px;padding:8px 12px}.rp .rp-card h3{font-size:1rem;margin:0 0 4px}',
+    '.rp .rp-radar{margin:0 0 12px}.rp .radar-fig{margin:0;display:flex;flex-wrap:wrap;gap:12px;align-items:center}.rp .radar-fig svg{flex:1 1 320px;height:auto}',
+    '.rp .radar-legend{list-style:none;margin:0;padding:0;font-size:.88rem}.rp .radar-legend li{margin:2px 0}.rp .radar-key{display:inline-block;width:18px;border-top:3px solid;margin-right:6px;vertical-align:middle}',
+    '.rp .rp-weights{background:#f7f9fc;border:1px solid #d6dde6;border-radius:8px;padding:6px 10px;font-size:.9rem}',
     '.rp .ok{color:#1b6e3a}.rp .bad{color:#b3261e}.rp .muted{color:#56616f}.rp .rp-note{white-space:pre-line;border:1px solid #d6dde6;border-radius:8px;padding:10px 12px;background:#f7f9fc}'
   ].join('\n');
   function tbl(head, rows, numCols) {
@@ -1407,17 +1602,23 @@
         .map(function (t) { return '<div class="rp-tile"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>'; }).join('') + '</div>' +
       (ins.headline.length ? '<ul>' + ins.headline.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''));
     var ev = ins.evaluations;
-    sec('evaluation', ev.length ? tbl(['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.ko + ' ' + a.weight + '%'; })).concat(['가중 점수', 'Design Tag', '검증 상태']),
+    var wt = rep.weighting;
+    sec('evaluation', '<p class="rp-weights">비중 프로필 <b>' + esc(wt.label) + '</b> <span class="muted">(' + esc(wt.source) + (wt.saved_at ? ' · ' + esc(wt.saved_at) : '') + (wt.memo ? ' · ' + esc(wt.memo) : '') + ')</span> — ' +
+      esc(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + wt.weights[a.id] + '%'; }).join(' · ')) + '</p>' +
+      (ev.length ? tbl(['브랜드', '모델'].concat(SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + a.ko + ' ' + wt.weights[a.id] + '%'; })).concat(['가중 점수', 'Design Tag', '검증 상태']),
       ev.map(function (e) {
         return [e.short, e.model_name].concat(SCORE_AXES.map(function (a) { return e.scores[a.key] == null ? '' : e.scores[a.key] + (e.source[a.key] === 'ai' ? ' AI' : ''); }))
           .concat([fmtScore(e.avg) + (e.avg != null && e.coverage < 100 ? ' (' + e.coverage + '%)' : ''), e.tags.join(', '), e.review]);
       }), [2, 3, 4, 5, 6, 7, 8, 9, 10]) +
-      '<p class="muted">척도 ' + esc(SCORE_LEVELS.map(function (l) { return l.value + ' ' + l.label; }).join(' · ')) + '. 가중 점수 = Σ(비중 × 점수) ÷ 평가한 기준의 비중 합 — 괄호는 평가한 비중 합(%). 「AI」는 디자이너 검증 전 AI 점수입니다. 「-」는 평가하지 않은 기준입니다. 아래 3~6번 Insight 는 이 표의 점수로 계산합니다. 평가 기준: ' + esc(RUBRIC_VERSION) + '</p>' : '<p class="muted">대상 모델이 없습니다.</p>');
+      '<p class="muted">척도 ' + esc(SCORE_LEVELS.map(function (l) { return l.value + ' ' + l.label; }).join(' · ')) + '. 가중 점수 = Σ(비중 × 점수) ÷ 평가한 기준의 비중 합 — 괄호는 평가한 비중 합(%). 「AI」는 디자이너 검증 전 AI 점수입니다. 「-」는 평가하지 않은 기준입니다. 아래 3~6번 Insight 는 이 표의 점수로 계산합니다. 평가 기준: ' + esc(RUBRIC_VERSION) + '</p>' : '<p class="muted">대상 모델이 없습니다.</p>'));
     sec('brands', ins.summary.length ? tbl(['브랜드', '모델', '가중 점수', '운전중량(t)', '출력대비중량(kW/t)', '출시 연도', '주요 태그', '최근 수집일'],
       ins.summary.map(function (r) { return [r.short, r.models, fmtScore(r.overall), r.weight ? r.weight.min + ' ~ ' + r.weight.max : '', fmtScore(r.pwr), r.years ? r.years.min + ' ~ ' + r.years.max : '', r.tags.map(function (t) { return t.tag; }).join(', '), r.latest]; }), [1, 2, 4]) : '<p class="muted">대상 모델이 없습니다.</p>');
     var cmp = ins.scores;
     var nb = cmp.rows.length, numIdx = []; for (var ni = 1; ni <= nb + 2; ni++) numIdx.push(ni);
-    sec('scores', cmp.rows.length ? tbl(['평가 기준', '가중치'].concat(cmp.rows.map(function (r) { return r.short; })).concat(['기준 평균']),
+    var radarRows = cmp.rows.filter(function (r) { return r.overall != null; });
+    var radar = radarRows.length ? '<div class="rp-radar">' + radarSvg({ title: 'Radar Chart — 브랜드별 8기준 평균 점수(' + wt.label + ')', axes: radarAxes(ins), series: radarSeries(ins, radarRows.map(function (r) { return r.brand; })) }) +
+      (radarRows.length > RADAR_MAX_SERIES ? '<p class="muted">Radar 에는 브랜드 순서대로 ' + RADAR_MAX_SERIES + '개만 그렸습니다(색이 많아지면 구분이 어렵습니다). 나머지는 아래 표에 있습니다.</p>' : '') + '</div>' : '';
+    sec('scores', cmp.rows.length ? radar + tbl(['평가 기준', '가중치'].concat(cmp.rows.map(function (r) { return r.short; })).concat(['기준 평균']),
       cmp.axes.map(function (a) {
         return ['C' + a.no + ' ' + a.name, a.weight + '%'].concat(cmp.rows.map(function (r) {
           var d = r.diff[a.key];
@@ -1484,6 +1685,12 @@
     setFeedbackStatus: setFeedbackStatus, feedbackSummary: feedbackSummary, stampTime: stampTime,
     daysBetween: daysBetween, addDays: addDays, addMonths: addMonths, nextDue: nextDue, defaultOps: defaultOps, restoreOps: restoreOps,
     staleModels: staleModels, opsStatus: opsStatus, toggleStep: toggleStep, completeCycle: completeCycle,
+    /* 2026-09-30 추가 — 보고서 목적별 비중 프로필 · Radar Chart */
+    WEIGHT_PRESETS: WEIGHT_PRESETS, RADAR_COLORS: RADAR_COLORS, RADAR_MAX_SERIES: RADAR_MAX_SERIES,
+    weightMap: weightMap, validateWeights: validateWeights, cleanWeights: cleanWeights, defaultWeighting: defaultWeighting, restoreWeighting: restoreWeighting,
+    weightProfile: weightProfile, latestVersion: latestVersion, currentWeights: currentWeights, weightLabel: weightLabel,
+    saveWeightVersion: saveWeightVersion, addWeightProfile: addWeightProfile, suggestProfile: suggestProfile,
+    radarSvg: radarSvg, radarSeries: radarSeries, radarAxes: radarAxes,
     reportModels: reportModels, buildReport: buildReport, reportSheets: reportSheets, reportBodyHtml: reportBodyHtml, reportHtml: reportHtml, esc: esc
   };
 });

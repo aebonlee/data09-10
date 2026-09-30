@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>내 PC 에서 쓰기 — Design Benchmarking · 업무보고 Agent</title>
+  <meta name="description" content="data09-10 도구를 내 PC 로 내려받아 쓰는 방법, 교육 기간·회사에서 실행할 수 있는 범위, AI 로 고쳐 쓰는 방법">
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .guide { max-width: calc(860px + 2 * var(--container-pad)); margin: 0 auto; padding: 24px var(--container-pad) 56px; }
+    .guide h1 { font-size: 1.6rem; margin: 0 0 6px; }
+    .guide h2 { margin-top: 0; }
+    .guide ol, .guide ul { padding-left: 22px; }
+    .guide li { margin: 6px 0; }
+    .guide li > p, .guide .card > p { white-space: normal; }
+    .guide code { background: #eef2f7; border-radius: 4px; padding: 1px 5px; font-size: .92em; overflow-wrap: anywhere; }
+    .guide .answer { border-left: 4px solid var(--primary); padding: 4px 0 4px 12px; margin: 8px 0 12px; }
+    .guide .files td, .guide .files th { vertical-align: top; }
+    .guide .top-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 20px; }
+  </style>
+</head>
+<body>
+  <main class="guide" id="main">
+    <p class="note"><a href="index.html">과제 A · Design Benchmarking</a> · <a href="report/index.html">과제 B · 업무보고 Agent</a></p>
+    <h1>내 PC 에서 쓰기 · 고쳐 쓰기 안내</h1>
+    <p class="note">2026-09-30 수강생 질문(다운로드 방법 · 교육 중 실행 · 회사에서 실행 · AI 로 고쳐 쓰기)에 대한 답입니다.</p>
+    <div class="top-links">
+      <a class="btn btn-primary" id="zip" href="https://github.com/aebonlee/data09-10/archive/refs/heads/main.zip">전체 파일 ZIP 내려받기</a>
+      <a class="btn" href="https://github.com/aebonlee/data09-10">GitHub 저장소 열기</a>
+    </div>
+
+    <section class="card" id="download">
+      <h2>1. 내려받는 방법</h2>
+      <p><strong>가장 쉬운 방법</strong> — 위 「전체 파일 ZIP 내려받기」 버튼을 누르면 바로 받아집니다. GitHub 가입이나 로그인은 필요 없습니다.</p>
+      <p><strong>GitHub 화면에서 받는 방법</strong></p>
+      <ol>
+        <li>「GitHub 저장소 열기」를 눌러 <code>github.com/aebonlee/data09-10</code> 화면으로 갑니다.</li>
+        <li>파일 목록 오른쪽 위의 초록색 <strong>「&lt;&gt; Code」</strong> 버튼을 누릅니다.</li>
+        <li>펼쳐진 창 맨 아래 <strong>「Download ZIP」</strong>을 누릅니다. <code>data09-10-main.zip</code> 이 「다운로드」 폴더에 저장됩니다.</li>
+      </ol>
+      <p><strong>압축 풀기와 열기</strong></p>
+      <ol>
+        <li>받은 <code>data09-10-main.zip</code> 을 마우스 오른쪽 단추로 누르고 <strong>「압축 풀기」(Windows: 「모두 추출」)</strong>를 고릅니다. ZIP 을 두 번 눌러 안을 들여다본 상태에서 파일을 열면 다른 파일을 못 찾아 화면이 깨지니, 꼭 풀어 주세요.</li>
+        <li>풀린 <code>data09-10-main</code> 폴더를 바탕화면이나 문서 폴더처럼 찾기 쉬운 곳에 둡니다.</li>
+        <li><code>index.html</code> 을 두 번 누르면 <strong>과제 A — Design Benchmarking Agent</strong> 가 크롬·엣지에서 열립니다.</li>
+        <li><code>report</code> 폴더 안의 <code>index.html</code> 을 두 번 누르면 <strong>과제 B — 업무보고 Agent</strong> 가 열립니다.</li>
+        <li>설치할 것은 없고, 인터넷이 없어도 돌아갑니다. 자료는 그 PC 의 브라우저에만 저장되니 과제 A는 「06 가져오기·내보내기」, 과제 B는 「07 이력·백업」에서 JSON 백업을 받아 두세요. 온라인 주소에서 넣은 자료는 내 PC 파일로 연 화면에 자동으로 옮겨지지 않으니, 백업 파일로 옮겨 주세요.</li>
+      </ol>
+      <p class="note">회사 PC 에서 .html 파일이 메일·보안 프로그램에 막히면, 정보보안 담당자에게 「설치 없이 브라우저에서 여는 HTML·JavaScript 파일이고 밖으로 데이터를 보내지 않는다」고 알려 주세요(AI 연결 설정을 켰을 때만 그 주소로 보냅니다).</p>
+    </section>
+
+    <section class="card" id="bm">
+      <h2>2. BM Agent 는 교육 기간에 실행해 볼 수 있나요?</h2>
+      <div class="answer">
+        <p><strong>네, 지금 바로 실행해 볼 수 있습니다.</strong> 지금 도구(1단계)는 온라인에서 이미지를 스스로 찾아오는 자동 수집 기능이 아직 없고(3단계 계획), 모은 자료를 표준 형식으로 정리·평가·비교·보고하는 부분을 먼저 만들었습니다. 그래서 대상 데이터가 없어도 아래처럼 돌려 볼 수 있습니다.</p>
+      </div>
+      <ul>
+        <li><strong>예시 데이터</strong> — 「06 가져오기·내보내기」 → 「예시 데이터 불러오기」. 가상 모델 15건(평가 점수 포함)으로 대시보드·갤러리·비교·Insight·Radar·리포트·피드백·운영 루프까지 전 과정을 확인합니다.</li>
+        <li><strong>공개 자료로 직접 수집</strong> — 경쟁사 공식 웹사이트·보도자료·전시회 사진처럼 누구나 볼 수 있는 자료에서 이미지를 내려받아 「05 자료 등록」에서 파일로 올리고, 가져온 페이지 주소를 Source URL 칸에 적습니다. 이미지 주소(<code>https://…jpg</code>)를 경로 칸에 적으면 인터넷이 될 때 그 주소에서 바로 보여 줍니다. 교육 중에 2~3개 브랜드만 넣어도 실제 데이터로 평가·비교·리포트를 확인할 수 있습니다.</li>
+        <li><strong>회사에 돌아가서 필요한 것</strong> — 팀이 이미 모아 둔 사내 정리표(엑셀), 카탈로그 PDF, 팀 공용 폴더의 이미지, 팀이 합의한 평가 점수와 비중. 엑셀은 「06 가져오기」에서 열 연결로 한꺼번에 넣습니다. 사내 자료는 회사 PC 에서만 다뤄 주세요.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="report-agent">
+      <h2>3. 업무보고 Agent 는 회사에 돌아가서만 실행할 수 있나요?</h2>
+      <div class="answer">
+        <p><strong>예시 메일로는 어디서나 실행해 볼 수 있고, 실제 메일은 회사 PC 에서 돌리셔야 합니다.</strong></p>
+      </div>
+      <ul>
+        <li><strong>지금(교육 중)</strong> — 과제 B 화면 「02 메일·자료 입력」 → 「예시 불러오기」. 가상 메일 9통(인물·업무 모두 가상)과 지난주 가상 보고서로 업무 묶기·실적/계획/이슈 분류·이전 계획 대비·주간/월간 초안·Word/Excel 내려받기까지 전부 해 볼 수 있습니다. <code>samples/report</code> 폴더의 .eml 파일로 「메일 파일 불러오기」도 연습할 수 있습니다.</li>
+        <li><strong>회사에서</strong> — 실제 업무 메일은 회사 밖으로 가져오면 안 되므로, 회사 PC 에 ZIP 을 풀어 <code>report/index.html</code> 을 열고 Outlook 에서 저장한 .eml 을 넣어 주세요. 도구는 메일을 그 PC 브라우저 안에서만 읽고 어디에도 보내지 않습니다. 클래식 Outlook 은 <code>tools/outlook</code> 폴더의 내보내기 스크립트로 폴더째 .eml 로 저장할 수 있습니다.</li>
+        <li><strong>AI 단계</strong> — 기본은 「프롬프트 복사 → 회사가 허용한 AI 에 붙여 넣기 → 답 붙여 넣기」입니다. 사내 LLM 주소·모델 정보를 알게 되면 「AI 연결 설정」에 넣어 바로 보낼 수 있고, 모르는 동안에는 규칙 분류와 복사·붙여 넣기만으로도 보고서 초안이 만들어집니다.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="vibe">
+      <h2>4. 회사에서 AI 로 기능·화면을 고쳐 쓸 수 있나요?</h2>
+      <div class="answer">
+        <p><strong>네, 가능합니다.</strong> 이 도구는 설치·빌드 없이 HTML·CSS·JavaScript 파일만으로 되어 있어서, AI 코딩 도우미에게 「이 폴더의 파일을 고쳐 줘」라고 말하는 방식(바이브 코딩)으로 고치기 좋은 구조입니다.</p>
+      </div>
+      <ol>
+        <li><strong>복사본 만들기</strong> — ZIP 을 풀어 쓰거나, GitHub 계정이 있으면 저장소 화면의 「Fork」로 내 계정에 복사합니다. 고치기 전에 폴더를 한 번 통째로 복사해 원본을 남겨 두세요.</li>
+        <li><strong>AI 도우미로 폴더 열기</strong> — 회사가 허용한 AI 코딩 도구(예: Claude Code, GitHub Copilot, Cursor)로 그 폴더를 엽니다. 대화형 AI(ChatGPT 등)만 쓸 수 있다면 고칠 파일 내용을 붙여 넣고 바뀐 부분을 받아 붙여 넣어도 됩니다.</li>
+        <li><strong>요청하기</strong> — 예) 「Insight 화면의 Radar Chart 에 모델별 보기를 추가해 줘」, 「평가 기준 C6 비중 기본값을 20% 로 바꿔 줘」, 「업무보고 분류 규칙에 '검토 완료' 를 완료 표현으로 넣어 줘」. 한 번에 하나씩 요청하고, 바뀐 화면을 바로 열어 확인해 주세요.</li>
+        <li><strong>테스트 지키기</strong> — 계산 규칙은 <code>test</code> 폴더의 테스트가 지켜 줍니다. PC 에 Node.js 가 있으면 폴더에서 <code>node test/logic.test.mjs</code> 를 실행해 「실패」가 없는지 확인하고, AI 에게도 「고친 뒤 테스트를 돌려서 전부 통과하는지 확인해 줘」라고 요청해 주세요. 새 규칙을 넣으면 테스트도 함께 추가해 달라고 하면 됩니다.</li>
+        <li><strong>주의</strong> — 사내 자료·API 키·비밀번호를 코드 파일에 적지 마세요. 공개 저장소(GitHub)에 올리면 누구나 보게 됩니다. 사내에서만 쓸 것은 회사 PC·사내 저장소에 두세요.</li>
+      </ol>
+      <p><strong>어느 파일을 고치면 되나요</strong></p>
+      <div class="table-wrap"><table class="list files">
+        <thead><tr><th scope="col">고치고 싶은 것</th><th scope="col">파일</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">평가 기준·권장 비중·5점 척도, 목적별 비중 프로필, 경쟁사·장비군·목적 목록, 가중 점수·강약점·리포트 계산, Radar Chart</th><td><code>js/logic.js</code> (<code>SCORE_AXES</code> · <code>WEIGHT_PRESETS</code> · <code>BRANDS</code> · <code>PURPOSES</code> · <code>radarSvg</code>)</td></tr>
+          <tr><th scope="row">과제 A 화면 구성·버튼·메뉴</th><td><code>js/app.js</code> (메뉴는 <code>NAV</code>, 화면마다 <code>viewInsight</code> · <code>viewReport</code> …)</td></tr>
+          <tr><th scope="row">색·글꼴·배치</th><td><code>css/style.css</code> (과제 A·B 공용)</td></tr>
+          <tr><th scope="row">예시 데이터</th><td><code>js/sample-data.js</code> (과제 B: <code>js/report-sample.js</code>)</td></tr>
+          <tr><th scope="row">업무보고 분류 규칙·보고서 양식</th><td><code>js/report-logic.js</code> (계산) · <code>js/report-app.js</code> (화면)</td></tr>
+          <tr><th scope="row">AI 연결(사내 LLM 주소)</th><td><code>js/ai-endpoint.js</code> · <code>js/ai-panel.js</code> — 주소·키는 코드가 아니라 화면의 「AI 연결 설정」에 넣습니다</td></tr>
+          <tr><th scope="row">테스트</th><td><code>test/logic.test.mjs</code> (과제 A, 과제 B·공용 테스트도 함께 실행)</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note">설계 배경과 남은 과제는 <code>docs/01_프로젝트_기획서.md</code>(과제 A)·<code>docs/02_과제B_업무보고Agent_기획서.md</code>(과제 B)·<code>docs/개발일지.md</code>에 있습니다. AI 도우미에게 먼저 이 문서들을 읽게 하면 구조에 맞게 고쳐 줍니다.</p>
+    </section>
+  </main>
+</body>
+</html>

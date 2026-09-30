@@ -540,6 +540,91 @@ test('reportHtml: 항목 10개(2번 디자인 평가 + 3~6번 평가 기반 Insi
   assert.ok(html.includes('요약 1줄\n요약 2줄'));
 });
 
+console.log('보고서 목적별 비중 프로필 · Radar Chart (2026-09-30)');
+test('기본 프로필 6개 — 모두 합 100, 「종합」은 평가 기준 자료 권장 비중 그대로', () => {
+  assert.equal(L.WEIGHT_PRESETS.length, 6);
+  L.WEIGHT_PRESETS.forEach(p => assert.ok(L.validateWeights(p.weights).ok, p.id));
+  assert.deepEqual(L.WEIGHT_PRESETS[0].weights, L.weightMap(null));
+  const wg = L.defaultWeighting();
+  assert.equal(L.weightLabel(wg), '종합 벤치마킹 v1');
+});
+test('validateWeights: 합 100·0~100 정수만', () => {
+  const base = L.weightMap(null);
+  assert.equal(L.validateWeights({ ...base, identity: 11 }).errors[0], '비중 합계가 101% 입니다. 100% 가 되게 맞춰 주세요.');
+  assert.equal(L.validateWeights({ ...base, identity: -1, hmi: 21 }).ok, false);
+  assert.equal(L.validateWeights({ ...base, identity: 10.5, hmi: 9.5 }).ok, false);
+  assert.equal(L.validateWeights({ ...base, identity: 0, hmi: 20 }).ok, true);   // 0 은 「이 목적에선 안 봄」
+  assert.equal(L.validateWeights(L.cleanWeights({ ...base, hmi: '' })).ok, false);
+});
+test('가중 점수는 프로필 비중으로 — 예시-EX215S: 종합 3.15 → Cabin·HMI 3.05 (손 계산)', () => {
+  const m = db.models.filter(x => x.model_name === '예시-EX215S');
+  const cabin = L.WEIGHT_PRESETS.find(p => p.id === 'cabin').weights;
+  assert.equal(L.modelEvaluations(m)[0].avg, 3.15);
+  assert.equal(L.modelEvaluations(m, cabin)[0].avg, 3.05);                     // (20+15+15+60+45+60+60+30)/100
+  // 비중 0 인 기준은 점수가 있어도 계산에서 빠진다
+  const only = { proportion: 100, form: 0, ext_cmf: 0, int_arch: 0, int_cmf: 0, ergonomics: 0, hmi: 0, identity: 0 };
+  assert.equal(L.modelEvaluations(m, only)[0].avg, 4);
+});
+test('saveWeightVersion: 덮어쓰지 않고 v2 로 쌓임 · 같은 값·합 틀림 거절 · 원본 불변', () => {
+  const wg = L.defaultWeighting();
+  const w2 = { ...L.currentWeights({ ...wg, active: 'cabin' }), ergonomics: 25, int_cmf: 10 };
+  const r = L.saveWeightVersion(wg, 'cabin', w2, { author: '디자이너A', memo: 'C6 상향', now: NOW });
+  assert.ok(r.ok);
+  const cab = L.weightProfile(r.weighting, 'cabin');
+  assert.deepEqual(cab.versions.map(v => v.v), [1, 2]);
+  assert.equal(cab.versions[0].weights.ergonomics, 20);                          // v1 은 그대로 남음
+  assert.equal(L.weightProfile(wg, 'cabin').versions.length, 1);                // 원본 불변
+  assert.equal(L.saveWeightVersion(r.weighting, 'cabin', w2).ok, false);        // v2 와 같음
+  assert.equal(L.saveWeightVersion(wg, 'cabin', { ...w2, hmi: 30 }).ok, false); // 합 110
+  const act = { ...r.weighting, active: 'cabin' };
+  assert.equal(L.weightLabel(act), 'Cabin·HMI 보고 v2');
+  assert.equal(L.currentWeights(act).ergonomics, 25);
+});
+test('addWeightProfile · restoreWeighting: 사용자 프로필 u1, 잘못된 버전·없는 active 는 버림', () => {
+  const r = L.addWeightProfile(L.defaultWeighting(), '임원 보고', L.WEIGHT_PRESETS[5].weights, { now: NOW });
+  assert.ok(r.ok); assert.equal(r.profile.id, 'u1');
+  assert.equal(L.addWeightProfile(r.weighting, '임원 보고', L.WEIGHT_PRESETS[5].weights).ok, false);
+  const back = L.restoreWeighting(JSON.parse(JSON.stringify({ ...r.weighting, active: 'u1' })));
+  assert.equal(back.active, 'u1'); assert.equal(back.profiles.length, 7);
+  const broken = L.restoreWeighting({ active: 'nope', profiles: [{ id: 'cmf', versions: [{ v: 1, weights: { proportion: 50 } }] }] });
+  assert.equal(broken.active, 'full');
+  assert.equal(L.weightProfile(broken, 'cmf').versions[0].weights.ext_cmf, 25); // 망가진 버전 대신 기본값
+  assert.equal(L.restoreDb({ models: [] }).weighting.active, 'full');           // 예전 저장본도 열림
+});
+test('suggestProfile: Scope 목적 하나면 그 프로필, 섞이면 종합', () => {
+  assert.equal(L.suggestProfile(['Cabin']), 'cabin');
+  assert.equal(L.suggestProfile(['Serviceability', 'Safety']), 'usability');
+  assert.equal(L.suggestProfile(['Exterior', 'CMF']), 'full');
+  assert.equal(L.suggestProfile([]), '');
+});
+test('buildReport: 비중 프로필·버전이 리포트·xlsx 에 적히고 Radar(SVG)가 들어감', () => {
+  const wg = L.saveWeightVersion(L.defaultWeighting(), 'cabin', { ...L.WEIGHT_PRESETS[2].weights, ergonomics: 25, int_cmf: 10 }, { memo: 'C6 상향', now: NOW }).weighting;
+  const r2 = L.buildReport({ ...dbr, weighting: { ...wg, active: 'cabin' } }, { now: NOW });
+  assert.equal(r2.weighting.label, 'Cabin·HMI 보고 v2');
+  const html = L.reportHtml(r2);
+  assert.ok(html.includes('비중 프로필 <b>Cabin·HMI 보고 v2</b>'));
+  assert.ok(html.includes('C6 인간공학 25%'));
+  assert.ok(html.includes('<svg') && html.includes('Radar Chart'));
+  assert.ok(!/<script|https?:\/\/(?!www\.w3\.org)/.test(html.slice(html.indexOf('<svg'), html.indexOf('</svg>'))));  // 외부 자원 없음
+  const sheet = L.reportSheets(r2).find(s => s.name === '요약').aoa;
+  assert.ok(sheet.some(row => row[0] === '비중 프로필' && row[1].startsWith('Cabin·HMI 보고 v2')));
+  assert.ok(r2.insight.summary.some((r, i) => r.overall !== rep.insight.summary[i].overall)); // 비중이 바뀌면 가중 점수도 바뀜
+});
+test('radarSvg: 기준 8개 축·계열마다 점, 빈 점수는 점 없이 범례에 「미평가」, 이름은 이스케이프', () => {
+  const svg = L.radarSvg({ series: [
+    { name: 'A<b>', values: [5, 4, 3, 2, 1, 2, 3, 4] },
+    { name: 'B', values: [3, null, 3, 3, null, 3, 3, 3] },
+    { name: '평균', values: [3, 3, 3, 3, 3, 3, 3, 3], dashed: true }] });
+  assert.equal((svg.match(/<line /g) || []).length, 8);
+  assert.equal((svg.match(/<circle /g) || []).length, 8 + 6);                   // 점선 평균은 점 없음
+  assert.ok(svg.includes('(미평가 C2·C5)'));
+  assert.ok(svg.includes('A&lt;b&gt;') && !svg.includes('A<b>'));
+  assert.ok(svg.includes('stroke-dasharray'));
+  // 5점 = 바깥 고리, 첫 축은 12시 방향(위)
+  const first = svg.match(/<circle cx="([\d.]+)" cy="([\d.]+)"/);
+  assert.deepEqual([Number(first[1]), Number(first[2])], [210, 78]);             // size 420, R = 210-78 = 132 → y = 210-132
+});
+
 console.log('\n' + passed + '개 통과' + (process.exitCode ? ' · 실패 있음' : ''));
 
 // 과제 B(업무보고 Agent) 테스트도 함께 돌린다 — 따로: node test/report-logic.test.mjs

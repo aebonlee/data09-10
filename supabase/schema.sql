@@ -299,6 +299,36 @@ comment on column public.benchmark_model.score_exterior is '예전 4축(v0.2~v0.
 alter table public.workspace alter column stale_days set default 7305;
 
 -- ----------------------------------------------------------------------------
+-- 1-f. 2026-09-30 — 보고서 목적별 비중 프로필 · 버전 관리 (평가 기준 자료 8절 「가중치 버전 관리」)
+--   · workspace.weight_profile — 지금 쓰는 프로필 id (full · exterior · cabin · cmf · usability · identity · u1 …)
+--   · weight_version — 프로필마다 비중을 바꿀 때마다 한 줄씩 쌓는다(기록성: 고치거나 지울 수 없다)
+--     비중 8칸은 0~100 정수, 합 100. 도구의 validateWeights 와 같은 규칙.
+-- ----------------------------------------------------------------------------
+alter table public.workspace add column if not exists weight_profile text not null default 'full';
+create table if not exists public.weight_version (
+  id            bigint generated always as identity primary key,
+  owner_id      uuid not null default auth.uid(),
+  profile_id    text not null check (profile_id ~ '^(full|exterior|cabin|cmf|usability|identity|u[0-9]+)$'),
+  profile_name  text not null check (length(trim(profile_name)) > 0),
+  version       int  not null check (version >= 1),
+  weights       jsonb not null,
+  saved_at      timestamptz not null default now(),
+  author        text not null default '',
+  memo          text not null default '',
+  constraint weight_version_keys check (weights ?& array['proportion','form','ext_cmf','int_arch','int_cmf','ergonomics','hmi','identity']),
+  constraint weight_version_range check (
+    (weights->>'proportion')::int between 0 and 100 and (weights->>'form')::int between 0 and 100 and
+    (weights->>'ext_cmf')::int between 0 and 100 and (weights->>'int_arch')::int between 0 and 100 and
+    (weights->>'int_cmf')::int between 0 and 100 and (weights->>'ergonomics')::int between 0 and 100 and
+    (weights->>'hmi')::int between 0 and 100 and (weights->>'identity')::int between 0 and 100),
+  constraint weight_version_sum check (
+    (weights->>'proportion')::int + (weights->>'form')::int + (weights->>'ext_cmf')::int + (weights->>'int_arch')::int +
+    (weights->>'int_cmf')::int + (weights->>'ergonomics')::int + (weights->>'hmi')::int + (weights->>'identity')::int = 100),
+  -- upsert 하지 않는다(쌓기만). 같은 프로필·버전 중복만 막는다
+  constraint weight_version_uniq unique (owner_id, profile_id, version)
+);
+
+-- ----------------------------------------------------------------------------
 -- 1-c. 과제 B — 업무보고 Agent (2026-09-29 추가)
 --
 --  설계: 메일 본문 원문은 DB 에 두지 않는다. 사내 메일은 기밀·개인정보가 섞여 있고
@@ -454,6 +484,7 @@ alter table public.report_mail     enable row level security;
 alter table public.report_item     enable row level security;
 alter table public.report_carryover enable row level security;
 alter table public.report_history  enable row level security;
+alter table public.weight_version  enable row level security;
 
 do $rls$
 declare t text;
@@ -530,6 +561,10 @@ drop policy if exists report_history_select on public.report_history;
 drop policy if exists report_history_insert on public.report_history;
 create policy report_history_select on public.report_history for select to authenticated using (owner_id = auth.uid());
 create policy report_history_insert on public.report_history for insert to authenticated with check (owner_id = auth.uid());
+drop policy if exists weight_version_select on public.weight_version;
+drop policy if exists weight_version_insert on public.weight_version;
+create policy weight_version_select on public.weight_version for select to authenticated using (owner_id = auth.uid());
+create policy weight_version_insert on public.weight_version for insert to authenticated with check (owner_id = auth.uid());
 
 -- ----------------------------------------------------------------------------
 -- 4. 표 권한 — Supabase 는 새 표마다 anon 에도 전 권한을 자동으로 붙인다.
@@ -545,8 +580,8 @@ grant select, insert, update, delete
   to authenticated;
 
 -- 기록성 표: 표 전체 권한을 먼저 끊고(재실행 때 예전 권한이 남지 않게) 필요한 것만 준다
-revoke all on public.design_feedback, public.ops_history, public.report_history from anon, authenticated;
-grant select, insert on public.design_feedback, public.ops_history, public.report_history to authenticated;
+revoke all on public.design_feedback, public.ops_history, public.report_history, public.weight_version from anon, authenticated;
+grant select, insert on public.design_feedback, public.ops_history, public.report_history, public.weight_version to authenticated;
 grant update (status, resolved_at) on public.design_feedback to authenticated;
 
 -- ----------------------------------------------------------------------------

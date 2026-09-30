@@ -341,3 +341,19 @@ pre.mail-body { white-space: pre-wrap; word-break: keep-all; overflow-wrap: brea
 .eval-table td select { min-width: 84px; }
 .eval-table td input { min-width: 220px; width: 100%; }
 .ai-send { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+
+/* 2026-09-30 — 보고서 목적별 비중 · Radar Chart · 내 PC 에서 쓰기 */
+.weight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; margin: 8px 0; }
+.weight-grid input { width: 100%; }
+.wt-ok { color: var(--ok); }
+.wt-bad { color: var(--danger); }
+.radar-box { margin-top: 12px; }
+.radar-fig { margin: 0; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.radar-fig svg { flex: 1 1 320px; min-width: 0; height: auto; }
+.radar-fig figcaption { flex: 1 1 200px; min-width: 0; }
+.radar-legend { list-style: none; margin: 0; padding: 0; font-size: .92rem; }
+.radar-legend li { margin: 3px 0; }
+.radar-legend .muted { color: var(--muted); }
+.radar-key { display: inline-block; width: 20px; border-top: 3px solid; margin-right: 8px; vertical-align: middle; }
+.local-use ol { margin: 0 0 12px; padding-left: 22px; }
+.local-use li { margin: 4px 0; }

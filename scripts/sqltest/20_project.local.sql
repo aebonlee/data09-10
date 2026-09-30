@@ -148,7 +148,7 @@ set local role anon;
 do $t$
 declare t text;
 begin
-  foreach t in array array['workspace','benchmark_scope','benchmark_model','model_media','design_feedback','ops_history',
+  foreach t in array array['workspace','benchmark_scope','benchmark_model','model_media','design_feedback','ops_history','weight_version',
                            'report_period','report_mail','report_item','report_carryover','report_history']
   loop
     perform public._assert_raises(format('select * from public.%I', t), '42501', 'anon 은 ' || t || ' 를 읽을 수 없다');
@@ -176,7 +176,7 @@ begin
 
   perform public._assert_eq((select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
      join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'),
-    39::bigint, '정책 수가 39개다 (과제 A: 4개 표 × 4 + 피드백 3 + 운영 이력 2 = 21, 과제 B: 4개 표 × 4 + 보고 이력 2 = 18, 재실행해도 늘지 않는다)');
+    41::bigint, '정책 수가 41개다 (과제 A: 4개 표 × 4 + 피드백 3 + 운영 이력 2 + 비중 버전 2 = 23, 과제 B: 4개 표 × 4 + 보고 이력 2 = 18, 재실행해도 늘지 않는다)');
 end $t$;
 
 -- ----------------------------------------------------------------------------
@@ -316,6 +316,26 @@ begin
     '42501', '운영 이력은 고칠 수 없다');
   perform public._assert_raises($s$delete from public.ops_history$s$,
     '42501', '운영 이력은 지울 수 없다');
+  -- 2026-09-30 비중 프로필 버전 — 쌓기만, 합 100, 0~100
+  insert into public.weight_version (profile_id, profile_name, version, weights, author, memo)
+    values ('cabin', 'Cabin·HMI 보고', 2, '{"proportion":5,"form":5,"ext_cmf":5,"int_arch":20,"int_cmf":10,"ergonomics":25,"hmi":20,"identity":10}', '디자이너A', 'C6 상향');
+  perform public._assert(true, '비중 버전을 쌓을 수 있다');
+  perform public._assert_raises($s$insert into public.weight_version (profile_id, profile_name, version, weights)
+     values ('cabin', 'x', 3, '{"proportion":5,"form":5,"ext_cmf":5,"int_arch":20,"int_cmf":10,"ergonomics":25,"hmi":20,"identity":11}')$s$,
+    '23514', '비중 합이 100 이 아니면 거절');
+  perform public._assert_raises($s$insert into public.weight_version (profile_id, profile_name, version, weights)
+     values ('cabin', 'x', 3, '{"proportion":-5,"form":15,"ext_cmf":5,"int_arch":20,"int_cmf":10,"ergonomics":25,"hmi":20,"identity":10}')$s$,
+    '23514', '비중은 0~100');
+  perform public._assert_raises($s$insert into public.weight_version (profile_id, profile_name, version, weights)
+     values ('cabin', 'x', 3, '{"proportion":100}')$s$,
+    '23514', '비중 8칸이 모두 있어야 한다');
+  perform public._assert_raises($s$insert into public.weight_version (profile_id, profile_name, version, weights)
+     values ('cabin', 'x', 2, '{"proportion":5,"form":5,"ext_cmf":5,"int_arch":20,"int_cmf":10,"ergonomics":25,"hmi":20,"identity":10}')$s$,
+    '23505', '같은 프로필·버전은 한 번만');
+  perform public._assert_raises($s$update public.weight_version set memo = 'x'$s$,
+    '42501', '비중 버전은 고칠 수 없다');
+  perform public._assert_raises($s$delete from public.weight_version$s$,
+    '42501', '비중 버전은 지울 수 없다');
   perform public._assert_raises($s$insert into public.design_feedback (feedback_id, target, type, rating, author)
      values ('FB0003', 'scores', 'Taxonomy·기준 조정', 2, '디자이너A')$s$,
     '23514', '「동의」가 아닌 피드백은 코멘트가 필요하다');

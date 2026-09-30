@@ -77,6 +77,12 @@
   function imgEl(x, alt) {
     if (!x) return '이미지 없음';
     if (x.data) return h('img', { src: x.data, alt: alt || '', loading: 'lazy' });
+    /* 2026-09-30 — 공개 웹의 이미지 주소(http/https)를 경로로 적으면 그 주소에서 바로 보여 줍니다(인터넷 연결 필요). 막히면 주소만 표시 */
+    if (/^https?:\/\//i.test(x.path || '')) {
+      var im = h('img', { src: x.path, alt: alt || '', loading: 'lazy', referrerpolicy: 'no-referrer' });
+      im.addEventListener('error', function () { im.replaceWith(h('span', null, '이미지 주소(열리지 않음): ' + x.path)); });
+      return im;
+    }
     return h('span', null, '경로 등록: ' + x.path);
   }
   function specLine(m) {
@@ -280,7 +286,8 @@
             h('div', { class: 'btn-row' },
               h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: confirmScope }, '범위 확정 → Benchmark 시작'),
               db.activeScope ? h('button', { type: 'button', class: 'btn', onclick: function () { db.activeScope = ''; scopeDraft = null; save(); toast('Scope 를 해제했습니다. 전체 자료를 봅니다.'); render(); } }, 'Scope 해제(전체 보기)') : null)))),
-      h('section', { class: 'card' }, h('h2', null, '저장한 Scope'), saved)
+      h('section', { class: 'card' }, h('h2', null, '저장한 Scope'), saved),
+      localUseCard()
     ];
   }
 
@@ -740,7 +747,7 @@
     });
     var pathIn = h('input', { placeholder: '예: \\\\NAS\\benchmark\\EX210_side.jpg', 'aria-label': '이미지 경로' });
     var mediaFs = h('fieldset', { class: 'block' }, h('legend', null, 'Media', h('span', { class: 'kind meta' }, '이미지·View')),
-      h('p', { class: 'note' }, '파일을 고르면 긴 변 ' + db.settings.imageMaxPx + 'px 로 줄여 이 브라우저에 보관합니다(설정은 「가져오기·내보내기」). 팀 공용 폴더에 둔 파일은 경로만 적어도 됩니다.'),
+      h('p', { class: 'note' }, '파일을 고르면 긴 변 ' + db.settings.imageMaxPx + 'px 로 줄여 이 브라우저에 보관합니다(설정은 「가져오기·내보내기」). 팀 공용 폴더에 둔 파일은 경로만 적어도 됩니다. 공개 웹의 이미지 주소(https://…)를 적으면 인터넷이 될 때 그 주소에서 바로 보여 줍니다.'),
       h('div', { class: 'form-grid' },
         field('추가할 이미지의 View', newView),
         field('이미지 파일', fileIn),
@@ -1040,11 +1047,135 @@
     else fallback();
   }
 
+  /* ══ 2026-09-30 — 보고서 목적별 비중 프로필 · Radar Chart (수강생 댓글 「보고서 목적별로 비중 변경 옵션」 「Radar Chart 가 필요합니다」) ══
+     계산은 logic.js(WEIGHT_PRESETS · saveWeightVersion · radarSvg …). 여기서는 고르기·고치기·그리기만 합니다. */
+  function weightOpts() { return { weights: L.currentWeights(db.weighting), weightLabel: L.weightLabel(db.weighting) }; }
+  function profileSelect(onChange) {
+    var s = selectEl('wprofile', db.weighting.profiles.map(function (p) {
+      return { value: p.id, label: p.name + ' v' + L.latestVersion(p).v + (p.builtin ? '' : ' (사용자)') };
+    }), db.weighting.active);
+    s.setAttribute('aria-label', '비중 프로필');
+    s.addEventListener('change', function () { db.weighting.active = s.value; save(); toast('비중 프로필을 「' + L.weightLabel(db.weighting) + '」로 바꿨습니다. 가중 점수·Radar·리포트가 이 비중으로 다시 계산됩니다.'); if (onChange) onChange(); else render(); });
+    return s;
+  }
+  function weightSummary(w) { return L.SCORE_AXES.map(function (a) { return 'C' + a.no + ' ' + w[a.id]; }).join(' · '); }
+  function weightCard(sc) {
+    var prof = L.weightProfile(db.weighting), cur = L.latestVersion(prof);
+    var sug = sc ? L.suggestProfile(sc.purposes) : '';
+    var sugProf = sug && sug !== prof.id ? L.weightProfile(db.weighting, sug) : null;
+    var inputs = {};
+    var totalEl = h('strong', null, '');
+    function readW() { var o = {}; L.SCORE_AXES.forEach(function (a) { o[a.id] = inputs[a.id].value; }); return L.cleanWeights(o); }
+    function updateTotal() {
+      var chk = L.validateWeights(readW());
+      totalEl.textContent = '합계 ' + (isFinite(chk.total) ? chk.total : '-') + '%';
+      totalEl.className = chk.ok ? 'wt-ok' : 'wt-bad';
+    }
+    var grid = h('div', { class: 'weight-grid' }, L.SCORE_AXES.map(function (a) {
+      inputs[a.id] = h('input', { type: 'number', name: 'w_' + a.id, min: '0', max: '100', step: '1', inputmode: 'numeric', value: String(cur.weights[a.id]) });
+      inputs[a.id].addEventListener('input', updateTotal);
+      return field('C' + a.no + ' ' + a.ko, inputs[a.id], { hint: '권장 ' + a.weight + '%' });
+    }));
+    var memo = h('input', { name: 'wmemo', placeholder: '예) 캡 개선 보고용으로 C6 상향' });
+    var author = h('input', { name: 'wauthor', value: db.lastAuthor || '', placeholder: '예) 디자인팀 홍길동', autocomplete: 'name' });
+    var newName = h('input', { name: 'wname', placeholder: '예) 임원 보고용' });
+    function saveVersion() {
+      var r = L.saveWeightVersion(db.weighting, prof.id, readW(), { author: author.value, memo: memo.value });
+      if (!r.ok) { toast(r.errors.join(' '), true); return; }
+      db.weighting = r.weighting; db.lastAuthor = author.value.trim(); save();
+      toast('「' + prof.name + '」 v' + r.version.v + ' 로 저장했습니다. 이전 버전은 아래 이력에 그대로 남습니다.'); render();
+    }
+    function saveNew() {
+      var r = L.addWeightProfile(db.weighting, newName.value, readW(), { author: author.value, memo: memo.value });
+      if (!r.ok) { toast(r.errors.join(' '), true); return; }
+      db.weighting = r.weighting; db.weighting.active = r.profile.id; db.lastAuthor = author.value.trim(); save();
+      toast('새 프로필 「' + r.profile.name + '」을 만들고 적용했습니다.'); render();
+    }
+    function reuse(v) {
+      var r = L.saveWeightVersion(db.weighting, prof.id, v.weights, { author: author.value, memo: 'v' + v.v + ' 비중으로 되돌림' });
+      if (!r.ok) { toast(r.errors.join(' '), true); return; }
+      db.weighting = r.weighting; save(); toast('v' + v.v + ' 비중을 v' + r.version.v + ' 로 다시 저장했습니다.'); render();
+    }
+    var hist = h('div', { class: 'table-wrap' }, h('table', { class: 'list' },
+      h('thead', null, h('tr', null, ['버전', '저장 시각', '작성자', '메모', '비중(%)', ''].map(function (t) { return h('th', { scope: 'col' }, t); }))),
+      h('tbody', null, prof.versions.slice().reverse().map(function (v) {
+        var latest = v === cur;
+        return h('tr', null, h('th', { scope: 'row' }, 'v' + v.v + (latest ? ' (사용 중)' : '')), h('td', null, v.saved_at || '처음 값'), h('td', null, v.author || '-'), h('td', null, v.memo || '-'),
+          h('td', { class: 'note' }, weightSummary(v.weights)),
+          h('td', null, latest ? null : h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { reuse(v); } }, '이 버전 다시 쓰기')));
+      }))));
+    var card = h('section', { class: 'card', id: 'weights' }, h('h2', null, '보고서 목적별 비중'),
+      h('p', { class: 'note' }, '보고서 목적에 맞는 비중 프로필을 골라 주세요. 가중 점수·강약점·Radar·Benchmarking Report 가 이 비중으로 다시 계산됩니다. ' +
+        '「종합 벤치마킹」은 평가 기준 자료의 권장 비중이고, 나머지 다섯 개는 목적에 맞춰 잡은 예시 값입니다. 팀 기준에 맞게 고쳐 새 버전으로 저장해 주세요(평가 기준 자료 8절 「가중치 버전 관리」 — 이전 버전은 지우지 않습니다).'),
+      h('div', { class: 'btn-row' }, field('비중 프로필', profileSelect()),
+        h('div', null, h('div', null, h('strong', null, prof.name + ' v' + cur.v), h('span', { class: 'note' }, ' · ' + prof.source)), h('div', { class: 'note' }, prof.desc || ''),
+          h('div', { class: 'note' }, weightSummary(cur.weights)))),
+      sugProf ? h('p', { class: 'alert info' }, 'Scope ' + sc.scope_id + ' 의 목적(' + sc.purposes.join(', ') + ')에는 「' + sugProf.name + '」 프로필이 맞습니다. ',
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { db.weighting.active = sugProf.id; save(); render(); } }, '이 프로필로 바꾸기')) : null,
+      h('details', null, h('summary', null, '비중 고치기 · 버전 이력 (' + prof.versions.length + '개)'),
+        h('p', { class: 'note' }, '0~100 정수, 합계 100% 로 맞춰 주세요. 0 은 「이 보고서에서는 보지 않음」입니다. 점수는 그대로이고 가중 점수만 달라집니다.'),
+        grid, h('p', null, totalEl),
+        h('div', { class: 'form-grid' }, field('메모', memo), field('작성자', author)),
+        h('div', { class: 'btn-row', style: 'margin-top:10px' },
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: saveVersion }, '「' + prof.name + '」 새 버전으로 저장'),
+          h('button', { type: 'button', class: 'btn', onclick: function () { L.SCORE_AXES.forEach(function (a) { inputs[a.id].value = String(cur.weights[a.id]); }); updateTotal(); } }, '입력 되돌리기')),
+        h('div', { class: 'form-grid', style: 'margin-top:10px' }, field('새 프로필 이름', newName)),
+        h('div', { class: 'btn-row', style: 'margin-top:6px' }, h('button', { type: 'button', class: 'btn', onclick: saveNew }, '위 비중으로 새 프로필 만들기')),
+        h('h3', null, '「' + prof.name + '」 버전 이력'), hist));
+    updateTotal();
+    return card;
+  }
+  /* Radar — 브랜드별 8기준 평균. 색은 브랜드를 처음 고른 순서로 자리를 정해, 다른 브랜드를 빼도 색이 바뀌지 않습니다 */
+  var radarState = { picked: null, slots: {} };
+  function radarColor(brand) {
+    if (radarState.slots[brand] == null) {
+      var used = Object.keys(radarState.slots).filter(function (b) { return radarState.picked.indexOf(b) >= 0; }).map(function (b) { return radarState.slots[b]; });
+      var i = 0; while (used.indexOf(i) >= 0) i++;
+      radarState.slots[brand] = i;
+    }
+    return L.RADAR_COLORS[radarState.slots[brand] % L.RADAR_COLORS.length];
+  }
+  function radarCard(ins) {
+    var rows = ins.scores.rows.filter(function (r) { return r.overall != null; });
+    if (!rows.length) return h('section', { class: 'card' }, h('h2', null, 'Radar Chart'), h('p', { class: 'note' }, '평가 점수가 들어간 브랜드가 없습니다. 아래 「디자인 평가」 표에서 점수를 넣으면 그려집니다.'));
+    var names = rows.map(function (r) { return r.brand; });
+    if (!radarState.picked) radarState.picked = names.slice(0, 5);
+    radarState.picked = radarState.picked.filter(function (b) { return names.indexOf(b) >= 0; });
+    if (!radarState.picked.length) radarState.picked = names.slice(0, 1);
+    Object.keys(radarState.slots).forEach(function (b) { if (radarState.picked.indexOf(b) < 0) delete radarState.slots[b]; });
+    var colors = {}; radarState.picked.forEach(function (b) { colors[b] = radarColor(b); });
+    var box = h('div', { class: 'radar-box' });
+    box.innerHTML = L.radarSvg({ title: 'Radar Chart — 브랜드별 8기준 평균 점수(' + ins.weightLabel + ')', axes: L.radarAxes(ins), series: L.radarSeries(ins, radarState.picked, colors) });  // radarSvg 가 이름을 이스케이프합니다
+    var full = radarState.picked.length >= L.RADAR_MAX_SERIES;
+    var picks = h('div', { class: 'opt-grid' }, rows.map(function (r) {
+      var on = radarState.picked.indexOf(r.brand) >= 0;
+      return h('label', { class: 'opt' }, h('input', { type: 'checkbox', checked: on, disabled: !on && full, onchange: function (e) {
+        if (e.target.checked) radarState.picked.push(r.brand); else radarState.picked = radarState.picked.filter(function (b) { return b !== r.brand; });
+        render();
+      } }), h('span', { class: 't' }, r.short + ' ' + r.overall + '점'));
+    }));
+    return h('section', { class: 'card' }, h('h2', null, 'Radar Chart — 8기준 브랜드 비교'),
+      h('p', { class: 'note' }, '브랜드별 8기준 평균 점수(1~5)입니다. 점선은 기준 평균, 축 아래 숫자는 지금 비중(' + ins.weightLabel + ')입니다. 점에 마우스를 올리면 점수가 보입니다. ' +
+        '한 번에 ' + L.RADAR_MAX_SERIES + '개 브랜드까지 고를 수 있습니다. 정확한 숫자는 아래 「평가표」에 있습니다. 같은 차트가 Benchmarking Report 4번 항목에도 들어갑니다.'),
+      picks, box);
+  }
+  /* 「내 PC 에서 쓰기」 — 수강생 댓글 「다운로드 받는 방법을 모르겠습니다」 */
+  var ZIP_URL = 'https://github.com/aebonlee/data09-10/archive/refs/heads/main.zip';
+  function localUseCard() {
+    return h('section', { class: 'card local-use' }, h('h2', null, '내 PC 에서 쓰기'),
+      h('ol', null,
+        h('li', null, h('a', { href: ZIP_URL }, '전체 파일 ZIP 내려받기'), ' 를 눌러 주세요(GitHub 가입·로그인 없이 받아집니다).'),
+        h('li', null, '받은 data09-10-main.zip 을 마우스 오른쪽 → 「압축 풀기(모두 추출)」로 풀어 주세요. ZIP 안에서 바로 열면 화면이 깨집니다.'),
+        h('li', null, '풀린 폴더의 index.html 을 더블클릭하면 이 화면(과제 A)이, report 폴더의 index.html 을 열면 업무보고 Agent(과제 B)가 열립니다.'),
+        h('li', null, '인터넷 없이도 돌아갑니다. 자료는 그 PC 의 브라우저에 저장되니 「가져오기·내보내기」의 JSON 백업을 받아 두세요.')),
+      h('p', null, h('a', { class: 'btn', href: 'guide.html' }, '자세한 안내 — 교육 중 실행 · 회사에서 쓰기 · AI 로 고쳐 쓰기')));
+  }
+
   /* ── 07 Insight ─────────────────────── */
   function viewInsight() {
     var models = L.reportModels(db, targetOpts());
     var sc = targetOpts().useScope ? scopeNow() : null;
-    var ins = L.buildInsight(models);
+    var ins = L.buildInsight(models, weightOpts());
     var head = pageHead('STAGE 07', 'Insight', 'BM 결과를 브랜드별 요약·점수 비교·강약점·Design Tag 트렌드·White Space 로 정리합니다. 대상: ' +
       (sc ? 'Scope ' + sc.scope_id : insState.equipment_type || '전체 장비군') + ' · 모델 ' + models.length + '건', targetTools());
     if (!models.length) return [head, h('div', { class: 'card empty' }, h('p', null, '대상 모델이 없습니다. 자료를 등록하거나 범위를 넓혀 주세요.'),
@@ -1131,9 +1262,11 @@
           return h('div', { class: 'tile' }, h('div', { class: 'k' }, t[0]), h('div', { class: 'v' }, t[1])); })),
         h('ul', null, ins.headline.map(function (x) { return h('li', null, x); })),
         h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-primary', href: '#/report' }, 'Benchmarking Report 로 보기'), h('a', { class: 'btn', href: '#/feedback/scores' }, '점수 비교에 피드백 남기기'))),
+      weightCard(sc),
+      radarCard(ins),
       h('section', { class: 'card' }, h('h2', null, '브랜드별 요약'), summaryTbl),
       h('section', { class: 'card' }, h('h2', null, '평가표 — 기준 × 브랜드'),
-        h('p', { class: 'note' }, '8기준 최종 점수(1~5)의 브랜드 평균과 가중 점수입니다. 괄호는 기준 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
+        h('p', { class: 'note' }, '8기준 최종 점수(1~5)의 브랜드 평균과 가중 점수(비중 ' + ins.weightLabel + ')입니다. 괄호는 기준 평균(모델 단위) 대비 차이이고, 0.5점 이상 높으면 초록·낮으면 빨강입니다.'), scoreTbl),
       h('section', { class: 'card' }, h('h2', null, '강·약점'), h('p', { class: 'note' }, '기준 평균보다 0.5점 이상 높거나 낮은 기준, 출력 대비 중량(kW/t)이 전체 평균과 10% 이상 다른 경우를 적습니다.'), swGrid),
       h('div', { class: 'grid-2' },
         h('section', { class: 'card' }, h('h2', null, 'Design Tag 트렌드'), tagTbl),
@@ -1174,6 +1307,7 @@
           h('button', { type: 'button', class: 'btn', onclick: exportXlsx }, 'Excel(xlsx)'),
           h('button', { type: 'button', class: 'btn', onclick: exportHtml }, 'HTML 내려받기'))),
         targetTools(),
+        h('div', { class: 'btn-row' }, field('보고서 목적(비중 프로필)', profileSelect()), h('a', { class: 'btn btn-sm', href: '#/insight' }, '비중 고치기 · 버전 이력(07 Insight)')),
         h('p', { class: 'note' }, 'xlsx 에는 요약·브랜드요약·점수비교·강약점·태그트렌드·선택비교·전문가피드백·운영 시트가 들어갑니다. HTML 은 파일 하나로 열리고 메일로 보내도 모양이 그대로입니다. PPTX 자동 생성은 3단계입니다.')),
       art
     ];
